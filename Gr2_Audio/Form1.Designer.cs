@@ -95,7 +95,7 @@
             this.introductionButton.Font = new System.Drawing.Font("Arial", 7.8F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.introductionButton.Location = new System.Drawing.Point(0, 61);
             this.introductionButton.Name = "introductionButton";
-            this.introductionButton.Size = new System.Drawing.Size(100, 33);
+            this.introductionButton.Size = new System.Drawing.Size(100, 39);
             this.introductionButton.TabIndex = 0;
             this.introductionButton.Text = "GIỚI THIỆU";
             this.introductionButton.UseVisualStyleBackColor = true;
