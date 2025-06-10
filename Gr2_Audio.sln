@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.13.35818.85 d17.13
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Gr2_Audio", "Gr2_Audio\Gr2_Audio.csproj", "{4ED9C59B-DCE6-4964-80FE-CAE96857DAFC}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{4ED9C59B-DCE6-4964-80FE-CAE96857DAFC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4ED9C59B-DCE6-4964-80FE-CAE96857DAFC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4ED9C59B-DCE6-4964-80FE-CAE96857DAFC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4ED9C59B-DCE6-4964-80FE-CAE96857DAFC}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {6167E60E-5A98-4A37-AC9A-8BA307E346D3}
+	EndGlobalSection
+EndGlobal
