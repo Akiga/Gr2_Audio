@@ -7,15 +7,26 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using System.IO;
+
+
+
 
 namespace Gr2_Audio
 {
     public partial class Form1: Form
     {
+        private const string HISTORY_FILE_PATH = "history.txt";
+        private List<string> connectionHistory = new List<string>();
+       
         public Form1()
         {
+
             InitializeComponent();
+            connectionHistory = new List<string>();
             ShowIntroduction();
+            LoadConnectionHistory();
+
         }
 
         private void MakeButtonRound(Button btn)
@@ -58,5 +69,50 @@ namespace Gr2_Audio
             MakeButtonRound(historyButton);
             MakeButtonRound(exitButton);
         }
+        private void LoadConnectionHistory()
+        {
+            connectionHistory.Clear();
+
+            try
+            {
+                if (File.Exists(HISTORY_FILE_PATH))
+                {
+                    var lines = File.ReadAllLines(HISTORY_FILE_PATH);
+                    connectionHistory.AddRange(lines);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error loading connection history: {ex.Message}",
+                    "Load History Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        private void SaveConnectionHistory()
+        {
+            try
+            {
+                File.WriteAllLines(HISTORY_FILE_PATH, connectionHistory);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error saving connection history: {ex.Message}",
+                    "Save History Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+
+        
+
+
+
+
+
+
+
+
+
+
+
     }
 }
