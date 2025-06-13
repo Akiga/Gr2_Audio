@@ -14,11 +14,11 @@ using System.IO;
 
 namespace Gr2_Audio
 {
-    public partial class Form1: Form
+    public partial class Form1 : Form
     {
         private const string HISTORY_FILE_PATH = "history.txt";
         private List<string> connectionHistory = new List<string>();
-       
+
         public Form1()
         {
 
@@ -101,8 +101,37 @@ namespace Gr2_Audio
             }
         }
 
+        private void ShowCallInterface()
+        {
+            mainPanel.Controls.Clear();
+
+            GroupBox modeGroup = new GroupBox
+            {
+                Text = "Connection Mode",
+                Location = new Point(50, 20),
+                Size = new Size(400, 60),
+                ForeColor = Color.White
+            };
+        }
+
+        RadioButton hostRadio = new RadioButton
+        {
+            Text = "Host Call",
+            Location = new Point(20, 25),
+            ForeColor = Color.White,
+            Checked = false
+        };
+
+        RadioButton clientRadio = new RadioButton
+        {
+            Text = "Join Call",
+            Location = new Point(200, 25),
+            ForeColor = Color.White,
+            Checked = true
+        };
 
         
+    }
 
 
 
@@ -114,5 +143,7 @@ namespace Gr2_Audio
 
 
 
+
+        
     }
 }
