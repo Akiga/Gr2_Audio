@@ -125,7 +125,42 @@
         private System.Windows.Forms.Button callButton;
         private System.Windows.Forms.Button exitButton;
         private System.Windows.Forms.Button historyButton;
+        private static Bitmap ResizeIcon(string path, int width, int height)
+        {
+            if (!System.IO.File.Exists(path))
+            {
+                return null; // Trả về null nếu tệp không tồn tại
+            }
+            try
+            {
+                using (Bitmap originalIcon = new Bitmap(path))
+                {
+                    return new Bitmap(originalIcon, new Size(width, height));
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("Lỗi khi tải ảnh: " + ex.Message);
+                return null;
+            }
+        }
 
+        private void SetButtonIcons()
+        {
+            string iconPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "icons");
+        
+            if (System.IO.File.Exists(System.IO.Path.Combine(iconPath, "intro.png")))
+                this.introductionButton.Image = ResizeIcon(System.IO.Path.Combine(iconPath, "intro.png"), 24, 24);
+        
+            if (System.IO.File.Exists(System.IO.Path.Combine(iconPath, "call.png")))
+                this.callButton.Image = ResizeIcon(System.IO.Path.Combine(iconPath, "call.png"), 24, 24);
+        
+            if (System.IO.File.Exists(System.IO.Path.Combine(iconPath, "history.png")))
+                this.historyButton.Image = ResizeIcon(System.IO.Path.Combine(iconPath, "history.png"), 24, 24);
+        
+            if (System.IO.File.Exists(System.IO.Path.Combine(iconPath, "exit.png")))
+                this.exitButton.Image = ResizeIcon(System.IO.Path.Combine(iconPath, "exit.png"), 24, 24);
+        }
     }
 }
 
