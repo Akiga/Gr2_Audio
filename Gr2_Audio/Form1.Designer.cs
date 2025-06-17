@@ -1,5 +1,10 @@
 ﻿namespace Gr2_Audio
 {
+    using System;
+
+    using System.Drawing;
+
+
     partial class Form1
     {
         /// <summary>
