@@ -1,16 +1,16 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
 using System.Drawing;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using System.Windows.Forms;
 using System.IO;
+using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
-
+using System.Threading;
+using System.Threading.Tasks;
+using System.Windows.Forms;
+using NAudio.Wave;
+using System.Linq;
+using System.Globalization;
 
 
 
@@ -19,8 +19,11 @@ namespace Gr2_Audio
     public partial class Form1 : Form
     {
         private const string HISTORY_FILE_PATH = "history.txt";
+        private WaveIn waveIn;
+        private WaveOut waveOut;
         private List<string> connectionHistory = new List<string>();
         private bool isServer = false;
+    
 
 
         public Form1()
@@ -35,14 +38,7 @@ namespace Gr2_Audio
 
         }
 
-        private void MakeButtonRound(Button btn)
-        {
-            System.Drawing.Drawing2D.GraphicsPath path = new System.Drawing.Drawing2D.GraphicsPath();
-            int radius = Math.Min(btn.Width, btn.Height); // hình tròn
-
-            path.AddEllipse(20, 0, radius, radius);
-            btn.Region = new Region(path);
-        }
+        
 
         private void ShowIntroduction()
         {
@@ -59,21 +55,24 @@ namespace Gr2_Audio
             mainPanel.Controls.Add(introLabel);
         }
 
-        private void introductionButton_Click(object sender, EventArgs e)
-        {
-            ShowIntroduction();
-        }
-
-        private void exitButton_Click(object sender, EventArgs e)
-        {
-            Application.Exit();
-        }
+     
+  
 
         private void Form1_Load(object sender, EventArgs e)
         {
             MakeButtonRound(callButton);
             MakeButtonRound(historyButton);
             MakeButtonRound(exitButton);
+        }
+
+
+        private void MakeButtonRound(Button btn)
+        {
+            System.Drawing.Drawing2D.GraphicsPath path = new System.Drawing.Drawing2D.GraphicsPath();
+            int radius = Math.Min(btn.Width, btn.Height); // hình tròn
+
+            path.AddEllipse(20, 0, radius, radius);
+            btn.Region = new Region(path);
         }
         private void LoadConnectionHistory()
         {
@@ -105,6 +104,25 @@ namespace Gr2_Audio
                 MessageBox.Show($"Error saving connection history: {ex.Message}",
                     "Save History Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
+        }
+
+       
+        private string GetWifiIPv4Address()
+        {
+            foreach (NetworkInterface ni in NetworkInterface.GetAllNetworkInterfaces())
+            {
+                if (ni.NetworkInterfaceType == NetworkInterfaceType.Wireless80211 && ni.OperationalStatus == OperationalStatus.Up)
+                {
+                    foreach (UnicastIPAddressInformation ip in ni.GetIPProperties().UnicastAddresses)
+                    {
+                        if (ip.Address.AddressFamily == AddressFamily.InterNetwork)
+                        {
+                            return ip.Address.ToString();
+                        }
+                    }
+                }
+            }
+            return "No Wi-Fi IPv4 address found";
         }
 
         private void ShowCallInterface()
@@ -160,7 +178,7 @@ namespace Gr2_Audio
                     ipAddressTextBox.ForeColor = Color.Gray;
                 }
             };
-             TextBox portTextBox = new TextBox
+            TextBox portTextBox = new TextBox
             {
                 Location = new Point(50, 140),
                 Name = "portTextBox",
@@ -247,30 +265,24 @@ namespace Gr2_Audio
                 ForeColor = Color.White
             };
 
-           
+
         }
-        private string GetWifiIPv4Address()
+
+
+        private void introductionButton_Click(object sender, EventArgs e)
         {
-            foreach (NetworkInterface ni in NetworkInterface.GetAllNetworkInterfaces())
-            {
-                if (ni.NetworkInterfaceType == NetworkInterfaceType.Wireless80211 && ni.OperationalStatus == OperationalStatus.Up)
-                {
-                    foreach (UnicastIPAddressInformation ip in ni.GetIPProperties().UnicastAddresses)
-                    {
-                        if (ip.Address.AddressFamily == AddressFamily.InterNetwork)
-                        {
-                            return ip.Address.ToString();
-                        }
-                    }
-                }
-            }
-            return "No Wi-Fi IPv4 address found";
+            ShowIntroduction();
         }
 
+        private void callButton_Click(object sender, EventArgs e)
+        {
+            ShowCallInterface();
+        }
 
-
-
-
+        private void exitButton_Click(object sender, EventArgs e)
+        {
+            Application.Exit();
+        }
     }   
 
 }              
