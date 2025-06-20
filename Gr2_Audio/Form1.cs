@@ -264,8 +264,52 @@ namespace Gr2_Audio
                 Font = new Font("Arial", 12),
                 ForeColor = Color.White
             };
+            //Gán sự kiện cho các thành phần giao diện: hostRadio, volumeBar, connectButton,...
+            hostRadio.CheckedChanged += (s, e) =>
+            {
+                bool isChecked = hostRadio.Checked;
+                isServer = isChecked;
+                ipAddressTextBox.Enabled = !isChecked;
 
+                if (isChecked)
+                {
+                    ipAddressTextBox.Text = GetWifiIPv4Address();
+                    ipAddressTextBox.ForeColor = Color.Gray;
+                }
 
+                connectButton.Text = isChecked ? "Start Hosting" : "Connect";
+            };
+
+            volumeBar.ValueChanged += (s, e) =>
+            {
+                volumeLabel.Text = $"{volumeBar.Value}%";
+                waveOut?.SetVolume(volumeBar.Value / 100f);
+            };
+
+            connectButton.Click += async (s, e) =>
+            {
+                connectButton.Enabled = false;
+
+                try
+                {
+                    if (isServer)
+                        await StartHosting();
+                    else
+                        await StartClient(ipAddressTextBox.Text);
+                }
+                finally
+                {
+                    connectButton.Enabled = true;
+                }
+            };
+
+            endButton.Click += EndCall;
+            muteButton.Click += MuteButton_Click;
+
+            mainPanel.Controls.AddRange(new Control[] {
+                modeGroup, ipAddressTextBox, connectButton, endButton,
+                muteButton, statusLabel, volumeTitle, volumeBar, volumeLabel
+            });
         }
 
 
