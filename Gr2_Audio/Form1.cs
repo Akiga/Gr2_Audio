@@ -11,6 +11,7 @@ using System.Windows.Forms;
 using NAudio.Wave;
 using System.Linq;
 using System.Globalization;
+using System.Runtime.InteropServices.ComTypes;
 
 
 
@@ -21,9 +22,13 @@ namespace Gr2_Audio
         private const string HISTORY_FILE_PATH = "history.txt";
         private WaveIn waveIn;
         private WaveOut waveOut;
+        private TcpListener server;
+        private TcpClient client;
         private List<string> connectionHistory = new List<string>();
         private bool isServer = false;
-    
+        private NetworkStream stream;
+        private BufferedWaveProvider waveProvider;
+        private bool isMicMuted = false;
 
 
         public Form1()
@@ -33,12 +38,48 @@ namespace Gr2_Audio
             connectionHistory = new List<string>();
             ShowIntroduction();
             LoadConnectionHistory();
+            InitializeAudio();
 
-           
+
 
         }
 
-        
+        private void SetupSuccessfulConnection()
+        {
+            /*isConnected = true;
+            UpdateButtonStates(true);
+            InitializeAudioDevices();
+            StartReceivingAudio();
+            waveIn?.StartRecording();*/
+        }
+        private void InitializeAudio()
+        {
+            waveIn = new WaveIn();
+            waveIn.WaveFormat = new WaveFormat(44100, 1);
+            waveIn.DataAvailable += WaveIn_DataAvailable;
+            waveIn.BufferMilliseconds = 50;
+        }
+
+        private void WaveIn_DataAvailable(object sender, WaveInEventArgs e)
+        {
+            try
+            {
+                if (stream != null && stream.CanWrite && !isMicMuted)
+                {
+                    stream.Write(e.Buffer, 0, e.BytesRecorded);
+                }
+            }
+            catch (Exception ex)
+            {
+                this.Invoke((MethodInvoker)delegate
+                {
+                    var statusLabel = mainPanel.Controls.Find("statusLabel", false)[0] as Label;
+                    statusLabel.Text = $"Status: Audio sending error";
+                    statusLabel.ForeColor = Color.Red;
+                });
+            }
+        }
+
 
         private void ShowIntroduction()
         {
@@ -283,7 +324,8 @@ namespace Gr2_Audio
             volumeBar.ValueChanged += (s, e) =>
             {
                 volumeLabel.Text = $"{volumeBar.Value}%";
-                waveOut?.SetVolume(volumeBar.Value / 100f);
+                if (waveOut != null)
+                    waveOut.Volume = volumeBar.Value / 100f;
             };
 
             connectButton.Click += async (s, e) =>
@@ -312,7 +354,87 @@ namespace Gr2_Audio
             });
         }
 
+        private async Task StartHosting()
+        {
+            try
+            {
+                UpdateStatus("Starting host...", Color.Yellow);
+                server = new TcpListener(IPAddress.Any, 8000);
+                server.Start();
+                UpdateStatus($"Waiting for connection on {GetWifiIPv4Address()}:8000", Color.Yellow);
 
+                using (var cts = new CancellationTokenSource(TimeSpan.FromMinutes(5)))
+                {
+                    client = await server.AcceptTcpClientAsync();
+                    stream = client.GetStream();
+                    SetupSuccessfulConnection();
+                    UpdateStatus("Client connected! Call in progress.", Color.Green);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Hosting error: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                UpdateStatus("Hosting failed", Color.Red);
+                ResetConnection();
+            }
+        }
+        private async Task StartClient(string serverIP)
+        {
+            try
+            {
+                UpdateStatus("Connecting...", Color.Yellow);
+                client = new TcpClient();
+                await client.ConnectAsync(serverIP, 8000);
+                stream = client.GetStream();
+                SetupSuccessfulConnection();
+                AddToConnectionHistory(serverIP);
+                UpdateStatus("Connected! Call in progress.", Color.Green);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Connection error: {ex.Message}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                UpdateStatus("Connection failed", Color.Red);
+                ResetConnection();
+            }
+        }
+        private void EndCall(object sender, EventArgs e)
+        {
+          /*  ResetConnection();
+            UpdateStatus("Call ended", Color.White);*/
+        }
+        private void UpdateStatus(string message, Color color)
+        {
+            this.Invoke((MethodInvoker)delegate
+            {
+                var statusLabel = mainPanel.Controls.Find("statusLabel", false)[0] as Label;
+                statusLabel.Text = $"Status: {message}";
+                statusLabel.ForeColor = color;
+            });
+        }
+
+        private void ResetConnection()
+        {
+           
+        }
+
+        private void MuteButton_Click(object sender, EventArgs e)
+        {
+            Button muteButton = sender as Button;
+            isMicMuted = !isMicMuted;
+
+            if (isMicMuted)
+            {
+                muteButton.Text = "Unmute Mic";
+                muteButton.BackColor = Color.Orange;
+                waveIn?.StopRecording();
+            }
+            else
+            {
+                muteButton.Text = "Mute Mic";
+                muteButton.BackColor = Color.LightGray;
+                waveIn?.StartRecording();
+            }
+        }
         private void introductionButton_Click(object sender, EventArgs e)
         {
             ShowIntroduction();
