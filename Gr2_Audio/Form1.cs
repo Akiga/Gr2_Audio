@@ -22,13 +22,17 @@ namespace Gr2_Audio
         private const string HISTORY_FILE_PATH = "history.txt";
         private WaveIn waveIn;
         private WaveOut waveOut;
+        private BufferedWaveProvider waveProvider;
         private TcpListener server;
         private TcpClient client;
-        private List<string> connectionHistory = new List<string>();
-        private bool isServer = false;
         private NetworkStream stream;
-        private BufferedWaveProvider waveProvider;
+        private bool isServer = false;
+        private bool isConnected = false;
         private bool isMicMuted = false;
+        private List<string> connectionHistory = new List<string>();
+        private CancellationTokenSource cancellationTokenSource;
+
+
 
 
         public Form1()
@@ -46,12 +50,49 @@ namespace Gr2_Audio
 
         private void SetupSuccessfulConnection()
         {
-            /*isConnected = true;
+            isConnected = true;
             UpdateButtonStates(true);
             InitializeAudioDevices();
             StartReceivingAudio();
-            waveIn?.StartRecording();*/
+            waveIn?.StartRecording();
         }
+
+        private void ShowIntroduction()
+        {
+            mainPanel.Controls.Clear();
+            Label introLabel = new Label
+            {
+                Text = "Ứng dụng gọi Audio giữa Client và Server \n Nhóm 2",
+                AutoSize = false,
+                TextAlign = ContentAlignment.MiddleCenter,
+                Dock = DockStyle.Fill,
+                Font = new Font("Arial", 16, FontStyle.Bold),
+                ForeColor = Color.Black,
+            };
+            mainPanel.Controls.Add(introLabel);
+        }
+
+
+        private void LoadConnectionHistory()
+        {
+            connectionHistory.Clear();
+
+            try
+            {
+                if (File.Exists(HISTORY_FILE_PATH))
+                {
+                    var lines = File.ReadAllLines(HISTORY_FILE_PATH);
+                    connectionHistory.AddRange(lines);
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error loading connection history: {ex.Message}",
+                    "Load History Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+
         private void InitializeAudio()
         {
             waveIn = new WaveIn();
@@ -81,20 +122,7 @@ namespace Gr2_Audio
         }
 
 
-        private void ShowIntroduction()
-        {
-            mainPanel.Controls.Clear();
-            Label introLabel = new Label
-            {
-                Text = "Ứng dụng gọi Audio giữa Client và Server \n Nhóm 2",
-                AutoSize = false,
-                TextAlign = ContentAlignment.MiddleCenter,
-                Dock = DockStyle.Fill,
-                Font = new Font("Arial", 16, FontStyle.Bold),
-                ForeColor = Color.Black,
-            };
-            mainPanel.Controls.Add(introLabel);
-        }
+  
 
      
   
@@ -115,24 +143,7 @@ namespace Gr2_Audio
             path.AddEllipse(20, 0, radius, radius);
             btn.Region = new Region(path);
         }
-        private void LoadConnectionHistory()
-        {
-            connectionHistory.Clear();
-
-            try
-            {
-                if (File.Exists(HISTORY_FILE_PATH))
-                {
-                    var lines = File.ReadAllLines(HISTORY_FILE_PATH);
-                    connectionHistory.AddRange(lines);
-                }
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Error loading connection history: {ex.Message}",
-                    "Load History Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
-        }
+        
 
         private void SaveConnectionHistory()
         {
@@ -353,7 +364,7 @@ namespace Gr2_Audio
                 muteButton, statusLabel, volumeTitle, volumeBar, volumeLabel
             });
         }
-
+       
         private async Task StartHosting()
         {
             try
@@ -397,11 +408,9 @@ namespace Gr2_Audio
                 ResetConnection();
             }
         }
-        private void EndCall(object sender, EventArgs e)
-        {
-          /*  ResetConnection();
-            UpdateStatus("Call ended", Color.White);*/
-        }
+
+       
+      
         private void UpdateStatus(string message, Color color)
         {
             this.Invoke((MethodInvoker)delegate
@@ -412,10 +421,7 @@ namespace Gr2_Audio
             });
         }
 
-        private void ResetConnection()
-        {
-           
-        }
+       
 
         private void MuteButton_Click(object sender, EventArgs e)
         {
@@ -435,6 +441,285 @@ namespace Gr2_Audio
                 waveIn?.StartRecording();
             }
         }
+
+        private void InitializeAudioDevices()
+        {
+            try
+            {
+                waveOut = new WaveOut();
+                waveProvider = new BufferedWaveProvider(new WaveFormat(44100, 1));
+                waveOut.Init(waveProvider);
+                waveOut.Play();
+
+                var volumeBar = mainPanel.Controls.Find("volumeBar", false)[0] as TrackBar;
+                waveOut.Volume = volumeBar.Value / 100f;
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error initializing audio devices: {ex.Message}",
+                    "Audio Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+  
+        
+        private void StartReceivingAudio()
+        {
+            cancellationTokenSource = new CancellationTokenSource();
+
+            Task.Run(async () =>
+            {
+                byte[] buffer = new byte[4096];
+                while (isConnected && stream != null)
+                {
+                    try
+                    {
+                        if (cancellationTokenSource.Token.IsCancellationRequested)
+                            break;
+
+                        int bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length, cancellationTokenSource.Token);
+                        if (bytesRead > 0)
+                        {
+                            waveProvider?.AddSamples(buffer, 0, bytesRead);
+                        }
+                    }
+                    catch (Exception)
+                    {
+                        if (isConnected)
+                        {
+                            this.Invoke((MethodInvoker)delegate
+                            {
+                                UpdateStatus("Audio receiving error", Color.Red);
+                            });
+                        }
+                        break;
+                    }
+                }
+            }, cancellationTokenSource.Token);
+        }
+        private void UpdateButtonStates(bool connected)
+        {
+            var connectButton = mainPanel.Controls["connectButton"] as Button;
+            var endButton = mainPanel.Controls["endButton"] as Button;
+            var muteButton = mainPanel.Controls["muteButton"] as Button;
+
+            if (connectButton != null) connectButton.Enabled = !connected;
+            if (endButton != null) endButton.Enabled = connected;
+            if (muteButton != null) muteButton.Enabled = connected;
+        }
+
+        private void EndCall(object sender, EventArgs e)
+        {
+            ResetConnection();
+            UpdateStatus("Call ended", Color.White);
+        }
+        private void ResetConnection()
+        {
+            isConnected = false;
+            isMicMuted = false;
+
+            cancellationTokenSource?.Cancel();
+
+            if (waveIn != null)
+            {
+                waveIn.StopRecording();
+                waveIn.Dispose();
+                waveIn = null;
+            }
+
+            if (waveOut != null)
+            {
+                waveOut.Stop();
+                waveOut.Dispose();
+                waveOut = null;
+            }
+
+            if (stream != null)
+            {
+                stream.Close();
+                stream = null;
+            }
+
+            if (client != null)
+            {
+                client.Close();
+                client = null;
+            }
+
+            if (server != null)
+            {
+                server.Stop();
+                server = null;
+            }
+
+            cancellationTokenSource?.Dispose();
+            cancellationTokenSource = null;
+
+            InitializeAudio();
+            UpdateButtonStates(false);
+        }
+        private void AddToConnectionHistory(string serverInfo)
+        {
+            if (string.IsNullOrWhiteSpace(serverInfo) ||
+                serverInfo.Contains("Enter IP address to connect") ||
+                serverInfo.Contains("No Wi-Fi IPv4 address found"))
+                return;
+
+            try
+            {
+                string connectionInfo = $"{serverInfo} - {DateTime.Now.ToString("dd/MM/yyyy HH:mm:ss")}";
+
+                if (!connectionHistory.Contains(connectionInfo))
+                {
+                    connectionHistory.Add(connectionInfo);
+
+                    connectionHistory = connectionHistory
+                        .Distinct()
+                        .OrderByDescending(entry => DateTime.ParseExact(
+                            entry.Split('-')[1].Trim(),
+                            "dd/MM/yyyy HH:mm:ss",
+                            CultureInfo.InvariantCulture))
+                        .Take(10)
+                        .ToList();
+
+                    SaveConnectionHistory();
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Error updating connection history: {ex.Message}",
+                    "History Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+        private void ShowHistory()
+        {
+            mainPanel.Controls.Clear();
+
+            Label titleLabel = new Label
+            {
+                Text = "Connection History",
+                Location = new Point(50, 20),
+                Size = new Size(500, 30),
+                Font = new Font("Arial", 16, FontStyle.Bold),
+                ForeColor = Color.White,
+                TextAlign = ContentAlignment.MiddleCenter
+            };
+
+            ListBox historyListBox = new ListBox
+            {
+                Location = new Point(50, 60),
+                Size = new Size(500, 300),
+                Font = new Font("Arial", 12),
+                BackColor = Color.FromArgb(47, 54, 64),
+                ForeColor = Color.White,
+                BorderStyle = BorderStyle.FixedSingle
+            };
+
+            if (connectionHistory.Count == 0)
+            {
+                historyListBox.Items.Add("No connection history available");
+            }
+            else
+            {
+                foreach (string connection in connectionHistory)
+                {
+                    historyListBox.Items.Add(connection);
+                }
+            }
+
+            Button clearButton = new Button
+            {
+                Text = "Clear History",
+                Location = new Point(50, 370),
+                Size = new Size(150, 40),
+                Font = new Font("Arial", 12, FontStyle.Bold),
+                BackColor = Color.IndianRed,
+                FlatStyle = FlatStyle.Flat
+            };
+            clearButton.Click += (s, e) =>
+            {
+                connectionHistory.Clear();
+                File.Delete(HISTORY_FILE_PATH);
+                historyListBox.Items.Clear();
+                historyListBox.Items.Add("No connection history available");
+            };
+
+            Button backButton = new Button
+            {
+                Text = "Back",
+                Location = new Point(400, 370),
+                Size = new Size(150, 40),
+                Font = new Font("Arial", 12, FontStyle.Bold),
+                BackColor = Color.LightGray,
+                FlatStyle = FlatStyle.Flat
+            };
+            backButton.Click += (s, e) => ShowCallInterface();
+
+            mainPanel.Controls.Add(titleLabel);
+            mainPanel.Controls.Add(historyListBox);
+            mainPanel.Controls.Add(clearButton);
+            mainPanel.Controls.Add(backButton);
+        }
+
+     
+        private void EndButton_Click(object sender, EventArgs e)
+        {
+            EndCall();
+        }
+
+        private void EndCall()
+        {
+            isConnected = false;
+            isMicMuted = false;
+
+            if (waveIn != null)
+            {
+                waveIn.StopRecording();
+                waveIn.Dispose();
+                waveIn = null;
+            }
+
+            if (waveOut != null)
+            {
+                waveOut.Stop();
+                waveOut.Dispose();
+                waveOut = null;
+            }
+
+            if (stream != null)
+            {
+                stream.Close();
+                stream = null;
+            }
+
+            if (client != null)
+            {
+                client.Close();
+                client = null;
+            }
+
+            if (server != null)
+            {
+                server.Stop();
+                server = null;
+            }
+
+            var connectButton = mainPanel.Controls.Find("connectButton", false)[0] as Button;
+            var endButton = mainPanel.Controls.Find("endButton", false)[0] as Button;
+            var ipAddressTextBox = mainPanel.Controls.Find("ipAddressTextBox", false)[0] as TextBox;
+            var statusLabel = mainPanel.Controls.Find("statusLabel", false)[0] as Label;
+            var muteButton = mainPanel.Controls.Find("muteButton", false)[0] as Button;
+
+            connectButton.Enabled = true;
+            endButton.Enabled = false;
+            ipAddressTextBox.Enabled = true;
+            muteButton.Enabled = false;
+            muteButton.Text = "Mute Mic";
+            muteButton.BackColor = Color.LightGray;
+            statusLabel.Text = "Status: Disconnected";
+            statusLabel.ForeColor = Color.White;
+        }
+
+
         private void introductionButton_Click(object sender, EventArgs e)
         {
             ShowIntroduction();
@@ -444,10 +729,19 @@ namespace Gr2_Audio
         {
             ShowCallInterface();
         }
+        private void HistoryButton_Click(object sender, EventArgs e)
+        {
+            ShowHistory();
+        }
 
         private void exitButton_Click(object sender, EventArgs e)
         {
             Application.Exit();
+        }
+
+        private void mainPanel_Paint(object sender, PaintEventArgs e)
+        {
+
         }
     }   
 
