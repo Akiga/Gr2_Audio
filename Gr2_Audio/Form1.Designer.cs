@@ -46,10 +46,10 @@
             // mainPanel
             // 
             this.mainPanel.BackColor = System.Drawing.Color.White;
-            this.mainPanel.Location = new System.Drawing.Point(80, 2);
-            this.mainPanel.Margin = new System.Windows.Forms.Padding(2);
+            this.mainPanel.Location = new System.Drawing.Point(101, 2);
+            this.mainPanel.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
             this.mainPanel.Name = "mainPanel";
-            this.mainPanel.Size = new System.Drawing.Size(528, 366);
+            this.mainPanel.Size = new System.Drawing.Size(888, 753);
             this.mainPanel.TabIndex = 0;
             this.mainPanel.Paint += new System.Windows.Forms.PaintEventHandler(this.mainPanel_Paint);
             // 
@@ -61,19 +61,19 @@
             this.panel2.Controls.Add(this.callButton);
             this.panel2.Controls.Add(this.introductionButton);
             this.panel2.Location = new System.Drawing.Point(1, -2);
-            this.panel2.Margin = new System.Windows.Forms.Padding(2);
+            this.panel2.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
             this.panel2.Name = "panel2";
-            this.panel2.Size = new System.Drawing.Size(75, 370);
+            this.panel2.Size = new System.Drawing.Size(100, 755);
             this.panel2.TabIndex = 0;
             // 
             // exitButton
             // 
             this.exitButton.Cursor = System.Windows.Forms.Cursors.Hand;
             this.exitButton.Image = ((System.Drawing.Image)(resources.GetObject("exitButton.Image")));
-            this.exitButton.Location = new System.Drawing.Point(0, 276);
-            this.exitButton.Margin = new System.Windows.Forms.Padding(2);
+            this.exitButton.Location = new System.Drawing.Point(0, 671);
+            this.exitButton.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
             this.exitButton.Name = "exitButton";
-            this.exitButton.Size = new System.Drawing.Size(75, 32);
+            this.exitButton.Size = new System.Drawing.Size(100, 39);
             this.exitButton.TabIndex = 3;
             this.exitButton.UseVisualStyleBackColor = true;
             this.exitButton.Click += new System.EventHandler(this.exitButton_Click);
@@ -82,10 +82,10 @@
             // 
             this.historyButton.Cursor = System.Windows.Forms.Cursors.Hand;
             this.historyButton.Image = ((System.Drawing.Image)(resources.GetObject("historyButton.Image")));
-            this.historyButton.Location = new System.Drawing.Point(0, 201);
-            this.historyButton.Margin = new System.Windows.Forms.Padding(2);
+            this.historyButton.Location = new System.Drawing.Point(0, 247);
+            this.historyButton.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
             this.historyButton.Name = "historyButton";
-            this.historyButton.Size = new System.Drawing.Size(75, 32);
+            this.historyButton.Size = new System.Drawing.Size(100, 39);
             this.historyButton.TabIndex = 2;
             this.historyButton.UseVisualStyleBackColor = true;
             // 
@@ -93,10 +93,10 @@
             // 
             this.callButton.Cursor = System.Windows.Forms.Cursors.Hand;
             this.callButton.Image = ((System.Drawing.Image)(resources.GetObject("callButton.Image")));
-            this.callButton.Location = new System.Drawing.Point(0, 115);
-            this.callButton.Margin = new System.Windows.Forms.Padding(2);
+            this.callButton.Location = new System.Drawing.Point(0, 142);
+            this.callButton.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
             this.callButton.Name = "callButton";
-            this.callButton.Size = new System.Drawing.Size(75, 32);
+            this.callButton.Size = new System.Drawing.Size(100, 39);
             this.callButton.TabIndex = 1;
             this.callButton.UseVisualStyleBackColor = true;
             this.callButton.Click += new System.EventHandler(this.callButton_Click);
@@ -105,10 +105,10 @@
             // 
             this.introductionButton.Cursor = System.Windows.Forms.Cursors.Hand;
             this.introductionButton.Font = new System.Drawing.Font("Arial", 7.8F, System.Drawing.FontStyle.Bold, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
-            this.introductionButton.Location = new System.Drawing.Point(0, 50);
-            this.introductionButton.Margin = new System.Windows.Forms.Padding(2);
+            this.introductionButton.Location = new System.Drawing.Point(0, 62);
+            this.introductionButton.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
             this.introductionButton.Name = "introductionButton";
-            this.introductionButton.Size = new System.Drawing.Size(75, 27);
+            this.introductionButton.Size = new System.Drawing.Size(100, 33);
             this.introductionButton.TabIndex = 0;
             this.introductionButton.Text = "GIỚI THIỆU";
             this.introductionButton.UseVisualStyleBackColor = true;
@@ -116,12 +116,12 @@
             // 
             // Form1
             // 
-            this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
+            this.AutoScaleDimensions = new System.Drawing.SizeF(8F, 16F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(600, 366);
+            this.ClientSize = new System.Drawing.Size(988, 753);
             this.Controls.Add(this.panel2);
             this.Controls.Add(this.mainPanel);
-            this.Margin = new System.Windows.Forms.Padding(2);
+            this.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
             this.Name = "Form1";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterScreen;
             this.Text = "Form1";

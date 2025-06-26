@@ -12,8 +12,10 @@ using NAudio.Wave;
 using System.Linq;
 using System.Globalization;
 using System.Runtime.InteropServices.ComTypes;
-
-
+using AForge.Video;
+using AForge.Video.DirectShow;
+using System.Drawing.Imaging;
+using System.IO.Compression;
 
 namespace Gr2_Audio
 {
@@ -26,26 +28,27 @@ namespace Gr2_Audio
         private TcpListener server;
         private TcpClient client;
         private NetworkStream stream;
+        private TcpListener videoServer;
+        private TcpClient videoClient;
+        private NetworkStream videoStream;
         private bool isServer = false;
         private bool isConnected = false;
         private bool isMicMuted = false;
         private List<string> connectionHistory = new List<string>();
         private CancellationTokenSource cancellationTokenSource;
-
-
-
+        private VideoCaptureDevice videoDevice;
+        private PictureBox videoBox;
+        private PictureBox localVideoBox;
+        private bool isVideoStreaming = false;
+        private Button toggleVideoButton;
 
         public Form1()
         {
-
             InitializeComponent();
             connectionHistory = new List<string>();
             ShowIntroduction();
             LoadConnectionHistory();
             InitializeAudio();
-
-
-
         }
 
         private void SetupSuccessfulConnection()
@@ -54,6 +57,7 @@ namespace Gr2_Audio
             UpdateButtonStates(true);
             InitializeAudioDevices();
             StartReceivingAudio();
+            StartReceivingVideo();
             waveIn?.StartRecording();
         }
 
@@ -71,7 +75,6 @@ namespace Gr2_Audio
             };
             mainPanel.Controls.Add(introLabel);
         }
-
 
         private void LoadConnectionHistory()
         {
@@ -91,7 +94,6 @@ namespace Gr2_Audio
                     "Load History Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
-
 
         private void InitializeAudio()
         {
@@ -121,19 +123,12 @@ namespace Gr2_Audio
             }
         }
 
-
-  
-
-     
-  
-
         private void Form1_Load(object sender, EventArgs e)
         {
             MakeButtonRound(callButton);
             MakeButtonRound(historyButton);
             MakeButtonRound(exitButton);
         }
-
 
         private void MakeButtonRound(Button btn)
         {
@@ -143,7 +138,6 @@ namespace Gr2_Audio
             path.AddEllipse(20, 0, radius, radius);
             btn.Region = new Region(path);
         }
-        
 
         private void SaveConnectionHistory()
         {
@@ -158,7 +152,6 @@ namespace Gr2_Audio
             }
         }
 
-       
         private string GetWifiIPv4Address()
         {
             foreach (NetworkInterface ni in NetworkInterface.GetAllNetworkInterfaces())
@@ -286,7 +279,7 @@ namespace Gr2_Audio
 
             Label statusLabel = new Label
             {
-                Location = new Point(50, 220),
+                Location = new Point(50, 230),
                 Name = "statusLabel",
                 Size = new Size(400, 60),
                 Text = "Status: Ready",
@@ -301,7 +294,7 @@ namespace Gr2_Audio
                 Text = "Volume:",
                 Size = new Size(70, 30),
                 Font = new Font("Arial", 12),
-                ForeColor = Color.White
+                ForeColor = Color.Black
             };
 
             TrackBar volumeBar = new TrackBar
@@ -350,7 +343,6 @@ namespace Gr2_Audio
             connectButton.Click += async (s, e) =>
             {
                 connectButton.Enabled = false;
-
                 try
                 {
                     if (isServer)
@@ -371,21 +363,63 @@ namespace Gr2_Audio
                 modeGroup, ipAddressTextBox, connectButton, endButton,
                 muteButton, statusLabel, volumeTitle, volumeBar, volumeLabel
             });
+
+            videoBox = new PictureBox
+            {
+                Name = "videoBox",
+                Location = new Point(50, 350),
+                Size = new Size(320, 240),
+                BorderStyle = BorderStyle.FixedSingle,
+                BackColor = Color.Black,
+                SizeMode = PictureBoxSizeMode.Zoom
+            };
+            mainPanel.Controls.Add(videoBox);
+
+            localVideoBox = new PictureBox
+            {
+                Name = "localVideoBox",
+                Location = new Point(400, 350),
+                Size = new Size(160, 120),
+                BorderStyle = BorderStyle.FixedSingle,
+                BackColor = Color.Black,
+                SizeMode = PictureBoxSizeMode.Zoom // Thêm dòng này
+            };
+            mainPanel.Controls.Add(localVideoBox);
+
+            toggleVideoButton = new Button
+            {
+                Name = "toggleVideoButton",
+                Text = "Start Video",
+                Location = new Point(400, 490),
+                Size = new Size(120, 50),
+                BackColor = Color.LightBlue,
+                Font = new Font("Arial", 12, FontStyle.Bold),
+                FlatStyle = FlatStyle.Flat,
+                Enabled = false
+            };
+            toggleVideoButton.Click += ToggleVideoButton_Click;
+            mainPanel.Controls.Add(toggleVideoButton);
         }
-       
+
         private async Task StartHosting()
         {
             try
             {
                 UpdateStatus("Starting host...", Color.Yellow);
                 server = new TcpListener(IPAddress.Any, 8000);
+                videoServer = new TcpListener(IPAddress.Any, 8001);
                 server.Start();
+                videoServer.Start();
                 UpdateStatus($"Waiting for connection on {GetWifiIPv4Address()}:8000", Color.Yellow);
 
                 using (var cts = new CancellationTokenSource(TimeSpan.FromMinutes(5)))
                 {
                     client = await server.AcceptTcpClientAsync();
                     stream = client.GetStream();
+
+                    videoClient = await videoServer.AcceptTcpClientAsync();
+                    videoStream = videoClient.GetStream();
+
                     SetupSuccessfulConnection();
                     UpdateStatus("Client connected! Call in progress.", Color.Green);
                 }
@@ -397,6 +431,7 @@ namespace Gr2_Audio
                 ResetConnection();
             }
         }
+
         private async Task StartClient(string serverIP)
         {
             try
@@ -405,6 +440,11 @@ namespace Gr2_Audio
                 client = new TcpClient();
                 await client.ConnectAsync(serverIP, 8000);
                 stream = client.GetStream();
+
+                videoClient = new TcpClient();
+                await videoClient.ConnectAsync(serverIP, 8001);
+                videoStream = videoClient.GetStream();
+
                 SetupSuccessfulConnection();
                 AddToConnectionHistory(serverIP);
                 UpdateStatus("Connected! Call in progress.", Color.Green);
@@ -417,8 +457,6 @@ namespace Gr2_Audio
             }
         }
 
-       
-      
         private void UpdateStatus(string message, Color color)
         {
             this.Invoke((MethodInvoker)delegate
@@ -428,8 +466,6 @@ namespace Gr2_Audio
                 statusLabel.ForeColor = color;
             });
         }
-
-       
 
         private void MuteButton_Click(object sender, EventArgs e)
         {
@@ -468,8 +504,7 @@ namespace Gr2_Audio
                     "Audio Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
-  
-        
+
         private void StartReceivingAudio()
         {
             cancellationTokenSource = new CancellationTokenSource();
@@ -504,15 +539,55 @@ namespace Gr2_Audio
                 }
             }, cancellationTokenSource.Token);
         }
+
+        private void StartReceivingVideo()
+        {
+            Task.Run(() =>
+            {
+                while (isConnected && videoStream != null)
+                {
+                    try
+                    {
+                        byte[] lengthBytes = new byte[4];
+                        int read = videoStream.Read(lengthBytes, 0, 4);
+                        if (read < 4) break;
+                        int imageLength = BitConverter.ToInt32(lengthBytes, 0);
+
+                        byte[] imageBytes = new byte[imageLength];
+                        int totalRead = 0;
+                        while (totalRead < imageLength)
+                        {
+                            int bytesRead = videoStream.Read(imageBytes, totalRead, imageLength - totalRead);
+                            if (bytesRead == 0) break;
+                            totalRead += bytesRead;
+                        }
+
+                        using (var ms = new MemoryStream(imageBytes))
+                        {
+                            Bitmap bmp = new Bitmap(ms);
+                            this.Invoke((MethodInvoker)delegate
+                            {
+                                videoBox.Image?.Dispose();
+                                videoBox.Image = (Bitmap)bmp.Clone();
+                            });
+                        }
+                    }
+                    catch { break; }
+                }
+            });
+        }
+
         private void UpdateButtonStates(bool connected)
         {
             var connectButton = mainPanel.Controls["connectButton"] as Button;
             var endButton = mainPanel.Controls["endButton"] as Button;
             var muteButton = mainPanel.Controls["muteButton"] as Button;
+            var toggleVideoButton = mainPanel.Controls["toggleVideoButton"] as Button;
 
             if (connectButton != null) connectButton.Enabled = !connected;
             if (endButton != null) endButton.Enabled = connected;
             if (muteButton != null) muteButton.Enabled = connected;
+            if (toggleVideoButton != null) toggleVideoButton.Enabled = connected;
         }
 
         private void EndCall(object sender, EventArgs e)
@@ -520,6 +595,7 @@ namespace Gr2_Audio
             ResetConnection();
             UpdateStatus("Call ended", Color.White);
         }
+
         private void ResetConnection()
         {
             isConnected = false;
@@ -559,12 +635,31 @@ namespace Gr2_Audio
                 server = null;
             }
 
+            if (videoStream != null)
+            {
+                videoStream.Close();
+                videoStream = null;
+            }
+
+            if (videoClient != null)
+            {
+                videoClient.Close();
+                videoClient = null;
+            }
+
+            if (videoServer != null)
+            {
+                videoServer.Stop();
+                videoServer = null;
+            }
+
             cancellationTokenSource?.Dispose();
             cancellationTokenSource = null;
 
             InitializeAudio();
             UpdateButtonStates(false);
         }
+
         private void AddToConnectionHistory(string serverInfo)
         {
             if (string.IsNullOrWhiteSpace(serverInfo) ||
@@ -598,6 +693,7 @@ namespace Gr2_Audio
                     "History Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
+
         private void ShowHistory()
         {
             mainPanel.Controls.Clear();
@@ -668,7 +764,6 @@ namespace Gr2_Audio
             mainPanel.Controls.Add(backButton);
         }
 
-     
         private void EndButton_Click(object sender, EventArgs e)
         {
             EndCall();
@@ -711,6 +806,24 @@ namespace Gr2_Audio
                 server = null;
             }
 
+            if (videoStream != null)
+            {
+                videoStream.Close();
+                videoStream = null;
+            }
+
+            if (videoClient != null)
+            {
+                videoClient.Close();
+                videoClient = null;
+            }
+
+            if (videoServer != null)
+            {
+                videoServer.Stop();
+                videoServer = null;
+            }
+
             var connectButton = mainPanel.Controls.Find("connectButton", false)[0] as Button;
             var endButton = mainPanel.Controls.Find("endButton", false)[0] as Button;
             var ipAddressTextBox = mainPanel.Controls.Find("ipAddressTextBox", false)[0] as TextBox;
@@ -725,8 +838,77 @@ namespace Gr2_Audio
             muteButton.BackColor = Color.LightGray;
             statusLabel.Text = "Status: Disconnected";
             statusLabel.ForeColor = Color.White;
+
+            StopVideo();
         }
 
+        private void ToggleVideoButton_Click(object sender, EventArgs e)
+        {
+            if (!isVideoStreaming)
+                StartVideo();
+            else
+                StopVideo();
+        }
+
+        private void StartVideo()
+        {
+            var videoDevices = new FilterInfoCollection(FilterCategory.VideoInputDevice);
+            if (videoDevices.Count == 0)
+            {
+                MessageBox.Show("No webcam found.");
+                return;
+            }
+            videoDevice = new VideoCaptureDevice(videoDevices[0].MonikerString);
+            videoDevice.NewFrame += VideoDevice_NewFrame;
+            videoDevice.Start();
+            isVideoStreaming = true;
+            toggleVideoButton.Text = "Stop Video";
+        }
+
+        private void StopVideo()
+        {
+            if (videoDevice != null && videoDevice.IsRunning)
+            {
+                videoDevice.SignalToStop();
+                videoDevice.NewFrame -= VideoDevice_NewFrame;
+                videoDevice = null;
+            }
+            isVideoStreaming = false;
+            toggleVideoButton.Text = "Start Video";
+            videoBox.Image = null;
+        }
+
+        private void VideoDevice_NewFrame(object sender, NewFrameEventArgs eventArgs)
+        {
+            try
+            {
+                using (var ms = new MemoryStream())
+                {
+                    Bitmap frame = (Bitmap)eventArgs.Frame.Clone();
+                    frame.Save(ms, ImageFormat.Jpeg);
+                    byte[] imageBytes = ms.ToArray();
+
+                    if (videoStream != null && videoStream.CanWrite)
+                    {
+                        byte[] lengthBytes = BitConverter.GetBytes(imageBytes.Length);
+                        videoStream.Write(lengthBytes, 0, lengthBytes.Length);
+                        videoStream.Write(imageBytes, 0, imageBytes.Length);
+                    }
+
+                    // Hiển thị lên localVideoBox (local preview)
+                    this.Invoke((MethodInvoker)delegate
+                    {
+                        var localVideoBox = mainPanel.Controls["localVideoBox"] as PictureBox;
+                        if (localVideoBox != null)
+                        {
+                            localVideoBox.Image?.Dispose();
+                            localVideoBox.Image = (Bitmap)frame.Clone();
+                        }
+                    });
+                }
+            }
+            catch { /* Xử lý lỗi nếu cần */ }
+        }
 
         private void introductionButton_Click(object sender, EventArgs e)
         {
@@ -737,6 +919,7 @@ namespace Gr2_Audio
         {
             ShowCallInterface();
         }
+
         private void HistoryButton_Click(object sender, EventArgs e)
         {
             ShowHistory();
@@ -751,40 +934,6 @@ namespace Gr2_Audio
         {
 
         }
-    }   
-
-}              
-                
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    
-
-
-
-
-
-
-
-
-
-
-
-
-        
-    
+    }
+}
 
