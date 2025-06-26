@@ -173,12 +173,13 @@ namespace Gr2_Audio
         private void ShowCallInterface()
         {
             mainPanel.Controls.Clear();
+            mainPanel.Size = new Size(888, 753);
 
             GroupBox modeGroup = new GroupBox
             {
                 Text = "Connection Mode",
-                Location = new Point(50, 20),
-                Size = new Size(400, 60),
+                Location = new Point(30, 20),
+                Size = new Size(350, 60),
                 ForeColor = Color.Black
             };
             RadioButton hostRadio = new RadioButton
@@ -188,20 +189,20 @@ namespace Gr2_Audio
                 ForeColor = Color.Black,
                 Checked = false
             };
-
             RadioButton clientRadio = new RadioButton
             {
                 Text = "Join Call",
-                Location = new Point(200, 25),
+                Location = new Point(150, 25),
                 ForeColor = Color.Black,
                 Checked = true
             };
             modeGroup.Controls.AddRange(new Control[] { hostRadio, clientRadio });
+
             TextBox ipAddressTextBox = new TextBox
             {
-                Location = new Point(50, 100),
+                Location = new Point(30, 100),
                 Name = "ipAddressTextBox",
-                Size = new Size(400, 30),
+                Size = new Size(350, 30),
                 Font = new Font("Arial", 12),
                 ForeColor = Color.Gray,
                 Text = "Enter IP address to connect"
@@ -214,7 +215,6 @@ namespace Gr2_Audio
                     ipAddressTextBox.ForeColor = Color.Black;
                 }
             };
-
             ipAddressTextBox.LostFocus += (s, e) =>
             {
                 if (string.IsNullOrWhiteSpace(ipAddressTextBox.Text))
@@ -223,11 +223,12 @@ namespace Gr2_Audio
                     ipAddressTextBox.ForeColor = Color.Gray;
                 }
             };
+
             TextBox portTextBox = new TextBox
             {
-                Location = new Point(50, 140),
+                Location = new Point(30, 140),
                 Name = "portTextBox",
-                Size = new Size(400, 30),
+                Size = new Size(350, 30),
                 Font = new Font("Arial", 12),
                 ForeColor = Color.Gray,
                 Text = "Enter port number"
@@ -242,9 +243,28 @@ namespace Gr2_Audio
             };
             mainPanel.Controls.Add(portTextBox);
 
+            TextBox portVideoTextBox = new TextBox
+            {
+                Location = new Point(30, 180),
+                Name = "portVideoTextBox",
+                Size = new Size(350, 30),
+                Font = new Font("Arial", 12),
+                ForeColor = Color.Gray,
+                Text = "Enter video port number"
+            };
+            portVideoTextBox.GotFocus += (s, e) =>
+            {
+                if (portVideoTextBox.Text == "Enter video port number")
+                {
+                    portVideoTextBox.Text = "";
+                    portVideoTextBox.ForeColor = Color.Black;
+                }
+            };
+            mainPanel.Controls.Add(portVideoTextBox);
+
             Button connectButton = new Button
             {
-                Location = new Point(50, 180),
+                Location = new Point(30, 230),
                 Name = "connectButton",
                 Size = new Size(120, 50),
                 Text = "Connect",
@@ -255,7 +275,7 @@ namespace Gr2_Audio
 
             Button endButton = new Button
             {
-                Location = new Point(190, 180),
+                Location = new Point(170, 230),
                 Name = "endButton",
                 Size = new Size(120, 50),
                 Text = "End Call",
@@ -267,7 +287,7 @@ namespace Gr2_Audio
 
             Button muteButton = new Button
             {
-                Location = new Point(330, 180),
+                Location = new Point(310, 230),
                 Name = "muteButton",
                 Size = new Size(120, 50),
                 Text = "Mute Mic",
@@ -279,7 +299,7 @@ namespace Gr2_Audio
 
             Label statusLabel = new Label
             {
-                Location = new Point(50, 230),
+                Location = new Point(30, 300),
                 Name = "statusLabel",
                 Size = new Size(400, 60),
                 Text = "Status: Ready",
@@ -290,7 +310,7 @@ namespace Gr2_Audio
 
             Label volumeTitle = new Label
             {
-                Location = new Point(50, 290),
+                Location = new Point(30, 370),
                 Text = "Volume:",
                 Size = new Size(70, 30),
                 Font = new Font("Arial", 12),
@@ -299,9 +319,9 @@ namespace Gr2_Audio
 
             TrackBar volumeBar = new TrackBar
             {
-                Location = new Point(120, 290),
+                Location = new Point(110, 370),
                 Name = "volumeBar",
-                Size = new Size(250, 45),
+                Size = new Size(200, 45),
                 Minimum = 0,
                 Maximum = 100,
                 Value = 50,
@@ -310,19 +330,28 @@ namespace Gr2_Audio
 
             Label volumeLabel = new Label
             {
-                Location = new Point(380, 290),
+                Location = new Point(320, 370),
                 Name = "volumeLabel",
                 Size = new Size(50, 30),
                 Text = "50%",
                 Font = new Font("Arial", 12),
                 ForeColor = Color.White
             };
-            //Gán sự kiện cho các thành phần giao diện: hostRadio, volumeBar, connectButton,...
+
+            // Sự kiện cho các thành phần giao diện
             hostRadio.CheckedChanged += (s, e) =>
             {
                 bool isChecked = hostRadio.Checked;
                 isServer = isChecked;
                 ipAddressTextBox.Enabled = !isChecked;
+
+                var ipBox = mainPanel.Controls["ipAddressTextBox"] as TextBox;
+                var portBox = mainPanel.Controls["portTextBox"] as TextBox;
+                var portVideoBox = mainPanel.Controls["portVideoTextBox"] as TextBox;
+
+                if (ipBox != null) ipBox.Visible = !isChecked;
+                if (portBox != null) portBox.Visible = !isChecked;
+                if (portVideoBox != null) portVideoBox.Visible = !isChecked;
 
                 if (isChecked)
                 {
@@ -346,9 +375,23 @@ namespace Gr2_Audio
                 try
                 {
                     if (isServer)
+                    {
                         await StartHosting();
+                    }
                     else
-                        await StartClient(ipAddressTextBox.Text);
+                    {
+                        if (!int.TryParse(portTextBox.Text, out int portAudio))
+                        {
+                            MessageBox.Show("Please enter a valid audio port number.", "Input Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                            return;
+                        }
+                        if (!int.TryParse(portVideoTextBox.Text, out int portVideo))
+                        {
+                            MessageBox.Show("Please enter a valid video port number.", "Input Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                            return;
+                        }
+                        await StartClient(ipAddressTextBox.Text, portAudio, portVideo);
+                    }
                 }
                 finally
                 {
@@ -367,8 +410,8 @@ namespace Gr2_Audio
             videoBox = new PictureBox
             {
                 Name = "videoBox",
-                Location = new Point(50, 350),
-                Size = new Size(320, 240),
+                Location = new Point(450, 40),
+                Size = new Size(400, 300),
                 BorderStyle = BorderStyle.FixedSingle,
                 BackColor = Color.Black,
                 SizeMode = PictureBoxSizeMode.Zoom
@@ -378,11 +421,11 @@ namespace Gr2_Audio
             localVideoBox = new PictureBox
             {
                 Name = "localVideoBox",
-                Location = new Point(400, 350),
-                Size = new Size(160, 120),
+                Location = new Point(700, 360),
+                Size = new Size(150, 100),
                 BorderStyle = BorderStyle.FixedSingle,
                 BackColor = Color.Black,
-                SizeMode = PictureBoxSizeMode.Zoom // Thêm dòng này
+                SizeMode = PictureBoxSizeMode.Zoom
             };
             mainPanel.Controls.Add(localVideoBox);
 
@@ -390,8 +433,8 @@ namespace Gr2_Audio
             {
                 Name = "toggleVideoButton",
                 Text = "Start Video",
-                Location = new Point(400, 490),
-                Size = new Size(120, 50),
+                Location = new Point(450, 360),
+                Size = new Size(200, 50),
                 BackColor = Color.LightBlue,
                 Font = new Font("Arial", 12, FontStyle.Bold),
                 FlatStyle = FlatStyle.Flat,
@@ -432,17 +475,17 @@ namespace Gr2_Audio
             }
         }
 
-        private async Task StartClient(string serverIP)
+        private async Task StartClient(string serverIP, int portAudio, int portVideo)
         {
             try
             {
                 UpdateStatus("Connecting...", Color.Yellow);
                 client = new TcpClient();
-                await client.ConnectAsync(serverIP, 8000);
+                await client.ConnectAsync(serverIP, portAudio);
                 stream = client.GetStream();
 
                 videoClient = new TcpClient();
-                await videoClient.ConnectAsync(serverIP, 8001);
+                await videoClient.ConnectAsync(serverIP, portVideo);
                 videoStream = videoClient.GetStream();
 
                 SetupSuccessfulConnection();
