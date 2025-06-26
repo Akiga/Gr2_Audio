@@ -186,13 +186,13 @@ namespace Gr2_Audio
                 Text = "Connection Mode",
                 Location = new Point(50, 20),
                 Size = new Size(400, 60),
-                ForeColor = Color.White
+                ForeColor = Color.Black
             };
             RadioButton hostRadio = new RadioButton
             {
                 Text = "Host Call",
                 Location = new Point(20, 25),
-                ForeColor = Color.White,
+                ForeColor = Color.Black,
                 Checked = false
             };
 
@@ -200,7 +200,7 @@ namespace Gr2_Audio
             {
                 Text = "Join Call",
                 Location = new Point(200, 25),
-                ForeColor = Color.White,
+                ForeColor = Color.Black,
                 Checked = true
             };
             modeGroup.Controls.AddRange(new Control[] { hostRadio, clientRadio });
@@ -239,11 +239,19 @@ namespace Gr2_Audio
                 ForeColor = Color.Gray,
                 Text = "Enter port number"
             };
+            portTextBox.GotFocus += (s, e) =>
+            {
+                if (portTextBox.Text == "Enter port number")
+                {
+                    portTextBox.Text = "";
+                    portTextBox.ForeColor = Color.Black;
+                }
+            };
             mainPanel.Controls.Add(portTextBox);
 
             Button connectButton = new Button
             {
-                Location = new Point(50, 150),
+                Location = new Point(50, 180),
                 Name = "connectButton",
                 Size = new Size(120, 50),
                 Text = "Connect",
@@ -254,7 +262,7 @@ namespace Gr2_Audio
 
             Button endButton = new Button
             {
-                Location = new Point(190, 150),
+                Location = new Point(190, 180),
                 Name = "endButton",
                 Size = new Size(120, 50),
                 Text = "End Call",
@@ -266,7 +274,7 @@ namespace Gr2_Audio
 
             Button muteButton = new Button
             {
-                Location = new Point(330, 150),
+                Location = new Point(330, 180),
                 Name = "muteButton",
                 Size = new Size(120, 50),
                 Text = "Mute Mic",
