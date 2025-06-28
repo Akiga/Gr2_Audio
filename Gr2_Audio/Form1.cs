@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
@@ -41,7 +41,9 @@ namespace Gr2_Audio
         private PictureBox localVideoBox;
         private bool isVideoStreaming = false;
         private Button toggleVideoButton;
-
+        private WaveFileWriter waveFileWriter;
+        private string audioFilePath;
+        private bool isRecording = false;
         public Form1()
         {
             InitializeComponent();
@@ -50,7 +52,7 @@ namespace Gr2_Audio
             LoadConnectionHistory();
             InitializeAudio();
         }
-
+        
         private void SetupSuccessfulConnection()
         {
             isConnected = true;
@@ -97,31 +99,39 @@ namespace Gr2_Audio
 
         private void InitializeAudio()
         {
+
             waveIn = new WaveIn();
-            waveIn.WaveFormat = new WaveFormat(44100, 1);
-            waveIn.DataAvailable += WaveIn_DataAvailable;
+            waveIn.WaveFormat = new WaveFormat(44100, 1);  
+            waveIn.DataAvailable += WaveIn_DataAvailable; 
             waveIn.BufferMilliseconds = 50;
+            audioFilePath = "audio_recording_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".wav";
+            waveFileWriter = new WaveFileWriter(audioFilePath, waveIn.WaveFormat);
         }
 
         private void WaveIn_DataAvailable(object sender, WaveInEventArgs e)
         {
             try
             {
+                // Kiểm tra xem stream có thể ghi và microphone không bị mute
                 if (stream != null && stream.CanWrite && !isMicMuted)
                 {
+                    // Ghi âm thanh vào file
+                    waveFileWriter.Write(e.Buffer, 0, e.BytesRecorded);
                     stream.Write(e.Buffer, 0, e.BytesRecorded);
                 }
             }
             catch (Exception ex)
             {
+                // Hiển thị thông tin lỗi vào statusLabel
                 this.Invoke((MethodInvoker)delegate
                 {
                     var statusLabel = mainPanel.Controls.Find("statusLabel", false)[0] as Label;
-                    statusLabel.Text = $"Status: Audio sending error";
+                    statusLabel.Text = $"Status: Audio sending error - {ex.Message}";
                     statusLabel.ForeColor = Color.Red;
                 });
             }
         }
+
 
         private void Form1_Load(object sender, EventArgs e)
         {
@@ -296,6 +306,22 @@ namespace Gr2_Audio
                 Font = new Font("Arial", 12, FontStyle.Bold),
                 FlatStyle = FlatStyle.Flat
             };
+            Button recordButton = new Button
+            {
+                Location = new Point(30, 400),   // Vị trí của nút ghi âm
+                Name = "recordButton",
+                Size = new Size(120, 50),
+                Text = "Start Recording",         // Text ban đầu khi chưa ghi âm
+                BackColor = Color.LightBlue,
+                Font = new Font("Arial", 12, FontStyle.Bold),
+                FlatStyle = FlatStyle.Flat
+            };
+
+            // Gắn sự kiện Click cho nút
+            recordButton.Click += RecordButton_Click;
+
+            // Thêm nút vào giao diện
+            mainPanel.Controls.Add(recordButton);
 
             Label statusLabel = new Label
             {
@@ -443,6 +469,33 @@ namespace Gr2_Audio
             toggleVideoButton.Click += ToggleVideoButton_Click;
             mainPanel.Controls.Add(toggleVideoButton);
         }
+        private void RecordButton_Click(object sender, EventArgs e)
+        {
+            Button recordButton = sender as Button;
+
+            // Nếu đang ghi âm, dừng ghi âm
+            if (isRecording)
+            {
+                // Dừng ghi âm và đóng file
+                waveIn.StopRecording();
+                waveFileWriter?.Close();
+                waveFileWriter = null;
+
+                recordButton.Text = "Start Recording";  // Đổi tên nút khi dừng ghi âm
+                MessageBox.Show("Recording stopped and saved to: " + audioFilePath);  // Thông báo kết quả
+                isRecording = false;  // Cập nhật trạng thái ghi âm
+            }
+            else
+            {
+                // Bắt đầu ghi âm
+                InitializeAudio();  // Khởi tạo lại audio (nếu chưa làm từ đầu)
+                waveIn.StartRecording();  // Bắt đầu ghi âm
+
+                recordButton.Text = "Stop Recording";  // Đổi tên nút khi đang ghi âm
+                isRecording = true;  // Cập nhật trạng thái ghi âm
+            }
+        }
+
 
         private async Task StartHosting()
         {
@@ -636,7 +689,9 @@ namespace Gr2_Audio
         private void EndCall(object sender, EventArgs e)
         {
             ResetConnection();
-            UpdateStatus("Call ended", Color.White);
+            UpdateStatus("Call ended. Audio saved to: " + audioFilePath, Color.White);
+            // Đóng file ghi âm sau khi kết thúc cuộc gọi
+            waveFileWriter?.Close();
         }
 
         private void ResetConnection()
