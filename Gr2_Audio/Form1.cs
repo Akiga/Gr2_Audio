@@ -1018,10 +1018,7 @@ namespace Gr2_Audio
             ShowCallInterface();
         }
 
-        private void HistoryButton_Click(object sender, EventArgs e)
-        {
-            ShowHistory();
-        }
+        
 
         private void exitButton_Click(object sender, EventArgs e)
         {
@@ -1031,6 +1028,11 @@ namespace Gr2_Audio
         private void mainPanel_Paint(object sender, PaintEventArgs e)
         {
 
+        }
+
+        private void historyButton_Click(object sender, EventArgs e)
+        {
+            ShowHistory();
         }
     }
 }

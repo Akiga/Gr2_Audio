@@ -88,6 +88,7 @@
             this.historyButton.Size = new System.Drawing.Size(100, 39);
             this.historyButton.TabIndex = 2;
             this.historyButton.UseVisualStyleBackColor = true;
+            this.historyButton.Click += new System.EventHandler(this.historyButton_Click);
             // 
             // callButton
             // 
