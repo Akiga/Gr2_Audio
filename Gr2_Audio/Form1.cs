@@ -44,6 +44,9 @@ namespace Gr2_Audio
         private WaveFileWriter waveFileWriter;
         private string audioFilePath;
         private bool isRecording = false;
+        private DateTime lastSent = DateTime.MinValue;
+        private bool isProcessingFrame = false;
+
         public Form1()
         {
             InitializeComponent();
@@ -122,13 +125,14 @@ namespace Gr2_Audio
             }
             catch (Exception ex)
             {
-                // Hiển thị thông tin lỗi vào statusLabel
-                this.Invoke((MethodInvoker)delegate
+                var statusLabelArray = mainPanel.Controls.Find("statusLabel", false);
+                if (statusLabelArray.Length > 0)
                 {
-                    var statusLabel = mainPanel.Controls.Find("statusLabel", false)[0] as Label;
+                    var statusLabel = statusLabelArray[0] as Label;
                     statusLabel.Text = $"Status: Audio sending error - {ex.Message}";
                     statusLabel.ForeColor = Color.Red;
-                });
+                }
+                // Không hiện MessageBox nữa để tránh popup liên tục
             }
         }
 
@@ -781,22 +785,33 @@ namespace Gr2_Audio
 
             try
             {
-                string connectionInfo = $"{serverInfo} - {DateTime.Now.ToString("dd/MM/yyyy HH:mm:ss")}";
+                string connectionInfo = $"{serverInfo} - {DateTime.Now:dd/MM/yyyy HH:mm:ss}";
+                connectionHistory.Insert(0, connectionInfo);
 
-                if (!connectionHistory.Contains(connectionInfo))
-                {
-                    connectionHistory.Add(connectionInfo);
-
-                    connectionHistory = connectionHistory
-                        .Distinct()
-                        .OrderByDescending(entry => DateTime.ParseExact(
-                            entry.Split('-')[1].Trim(),
+                // Giữ lại tối đa 10 bản ghi gần nhất, loại bỏ bản ghi không hợp lệ
+                connectionHistory = connectionHistory
+                    .Where(entry =>
+                    {
+                        var idx = entry.LastIndexOf('-');
+                        if (idx < 0) return false;
+                        var datePart = entry.Substring(idx + 1).Trim();
+                        DateTime dt;
+                        return DateTime.TryParseExact(
+                            datePart,
                             "dd/MM/yyyy HH:mm:ss",
-                            CultureInfo.InvariantCulture))
-                        .Take(10)
-                        .ToList();
+                            CultureInfo.InvariantCulture,
+                            DateTimeStyles.None,
+                            out dt);
+                    })
+                    .Take(10)
+                    .ToList();
 
-                    SaveConnectionHistory();
+                SaveConnectionHistory();
+
+                // Kiểm tra file có tồn tại không, nếu không thì tạo file mẫu
+                if (!File.Exists(HISTORY_FILE_PATH))
+                {
+                    File.WriteAllText(HISTORY_FILE_PATH, "Test file created by AddToConnectionHistory\n");
                 }
             }
             catch (Exception ex)
@@ -992,12 +1007,26 @@ namespace Gr2_Audio
 
         private void VideoDevice_NewFrame(object sender, NewFrameEventArgs eventArgs)
         {
+            if (isProcessingFrame) return;
+            isProcessingFrame = true;
             try
             {
+                // Chỉ gửi frame nếu đã đủ thời gian (ví dụ 100ms = 10fps)
+                if ((DateTime.Now - lastSent).TotalMilliseconds < 100)
+                    return;
+                lastSent = DateTime.Now;
+
                 using (var ms = new MemoryStream())
                 {
-                    Bitmap frame = (Bitmap)eventArgs.Frame.Clone();
-                    frame.Save(ms, ImageFormat.Jpeg);
+                    // Resize frame nhỏ lại (ví dụ 320x240)
+                    Bitmap original = (Bitmap)eventArgs.Frame.Clone();
+                    Bitmap resized = new Bitmap(original, new Size(320, 240));
+                    // Nén JPEG chất lượng thấp hơn (ví dụ quality = 40)
+                    var encoder = ImageCodecInfo.GetImageEncoders().First(c => c.FormatID == ImageFormat.Jpeg.Guid);
+                    var encoderParams = new EncoderParameters(1);
+                    encoderParams.Param[0] = new EncoderParameter(System.Drawing.Imaging.Encoder.Quality, 40L);
+                    resized.Save(ms, encoder, encoderParams);
+
                     byte[] imageBytes = ms.ToArray();
 
                     if (videoStream != null && videoStream.CanWrite)
@@ -1014,12 +1043,19 @@ namespace Gr2_Audio
                         if (localVideoBox != null)
                         {
                             localVideoBox.Image?.Dispose();
-                            localVideoBox.Image = (Bitmap)frame.Clone();
+                            localVideoBox.Image = (Bitmap)resized.Clone();
                         }
                     });
+
+                    original.Dispose();
+                    resized.Dispose();
                 }
             }
             catch { /* Xử lý lỗi nếu cần */ }
+            finally
+            {
+                isProcessingFrame = false;
+            }
         }
 
         private void introductionButton_Click(object sender, EventArgs e)
