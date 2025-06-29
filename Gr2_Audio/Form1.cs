@@ -112,8 +112,8 @@ namespace Gr2_Audio
         {
             try
             {
-                // Kiểm tra xem stream có thể ghi và microphone không bị mute
-                if (stream != null && stream.CanWrite && !isMicMuted)
+                // Kiểm tra xem stream có thể ghi, microphone không bị mute và waveFileWriter còn tồn tại
+                if (stream != null && stream.CanWrite && !isMicMuted && waveFileWriter != null)
                 {
                     // Ghi âm thanh vào file
                     waveFileWriter.Write(e.Buffer, 0, e.BytesRecorded);
@@ -473,26 +473,40 @@ namespace Gr2_Audio
         {
             Button recordButton = sender as Button;
 
-            // Nếu đang ghi âm, dừng ghi âm
             if (isRecording)
             {
-                // Dừng ghi âm và đóng file
-                waveIn.StopRecording();
-                waveFileWriter?.Close();
-                waveFileWriter = null;
+                if (waveIn != null)
+                {
+                    waveIn.StopRecording();
+                    waveIn.Dispose();
+                    waveIn = null;
+                }
+                if (waveFileWriter != null)
+                {
+                    waveFileWriter.Dispose();
+                    waveFileWriter = null;
+                }
 
-                recordButton.Text = "Start Recording";  // Đổi tên nút khi dừng ghi âm
-                MessageBox.Show("Recording stopped and saved to: " + audioFilePath);  // Thông báo kết quả
-                isRecording = false;  // Cập nhật trạng thái ghi âm
+                recordButton.Text = "Start Recording";
+                MessageBox.Show("Recording stopped and saved to: " + audioFilePath);
+                isRecording = false;
             }
             else
             {
-                // Bắt đầu ghi âm
-                InitializeAudio();  // Khởi tạo lại audio (nếu chưa làm từ đầu)
-                waveIn.StartRecording();  // Bắt đầu ghi âm
+                audioFilePath = "audio_recording_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".wav";
+                waveIn = new WaveIn();
+                waveIn.WaveFormat = new WaveFormat(44100, 1);
+                waveIn.DataAvailable += (s, args) =>
+                {
+                    // Chỉ ghi nếu writer đã được khởi tạo
+                    if (waveFileWriter != null)
+                        waveFileWriter.Write(args.Buffer, 0, args.BytesRecorded);
+                };
+                waveFileWriter = new WaveFileWriter(audioFilePath, waveIn.WaveFormat);
 
-                recordButton.Text = "Stop Recording";  // Đổi tên nút khi đang ghi âm
-                isRecording = true;  // Cập nhật trạng thái ghi âm
+                waveIn.StartRecording();
+                recordButton.Text = "Stop Recording";
+                isRecording = true;
             }
         }
 
