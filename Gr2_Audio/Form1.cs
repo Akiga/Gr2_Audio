@@ -1,21 +1,22 @@
+using AForge.Video;
+using AForge.Video.DirectShow;
+using NAudio.Wave;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Drawing;
+using System.Drawing.Imaging;
+using System.Globalization;
 using System.IO;
+using System.IO.Compression;
+using System.Linq;
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Net.Sockets;
+using System.Runtime.InteropServices.ComTypes;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-using NAudio.Wave;
-using System.Linq;
-using System.Globalization;
-using System.Runtime.InteropServices.ComTypes;
-using AForge.Video;
-using AForge.Video.DirectShow;
-using System.Drawing.Imaging;
-using System.IO.Compression;
 
 namespace Gr2_Audio
 {
@@ -115,25 +116,65 @@ namespace Gr2_Audio
         {
             try
             {
-                // Kiểm tra xem stream có thể ghi, microphone không bị mute và waveFileWriter còn tồn tại
-                if (stream != null && stream.CanWrite && !isMicMuted && waveFileWriter != null)
+                bool shouldWriteToFile = isRecording && waveFileWriter != null;
+                bool shouldSendToNetwork = stream != null && stream.CanWrite && !isMicMuted;
+
+                if (!shouldWriteToFile && !shouldSendToNetwork)
+                    return;
+                if (shouldWriteToFile && shouldSendToNetwork)
                 {
-                    // Ghi âm thanh vào file
                     waveFileWriter.Write(e.Buffer, 0, e.BytesRecorded);
                     stream.Write(e.Buffer, 0, e.BytesRecorded);
                 }
+                else if (shouldWriteToFile)
+                {
+                    waveFileWriter.Write(e.Buffer, 0, e.BytesRecorded);
+                }
+                else if (shouldSendToNetwork)
+                {
+                    stream.Write(e.Buffer, 0, e.BytesRecorded);
+                }
+            }
+            catch (IOException ioEx)
+            {
+                HandleAudioError($"Network/File error: {ioEx.Message}");
+            }
+            catch (ObjectDisposedException disposedEx)
+            {
+                HandleAudioError($"Audio resource disposed: {disposedEx.Message}");
             }
             catch (Exception ex)
             {
-                var statusLabelArray = mainPanel.Controls.Find("statusLabel", true);
-                if (statusLabelArray.Length > 0)
-                {
-                    var statusLabel = statusLabelArray[0] as Label;
-                    statusLabel.Text = $"Status: Audio sending error - {ex.Message}";
-                    statusLabel.ForeColor = Color.Red;
-                }
-                // Không hiện MessageBox nữa để tránh popup liên tục
+                HandleAudioError($"Audio processing error: {ex.Message}");
             }
+        }
+
+        private void HandleAudioError(string errorMessage)
+        {
+            if (mainPanel.InvokeRequired)
+            {
+                mainPanel.Invoke((MethodInvoker)(() => HandleAudioError(errorMessage)));
+                return;
+            }
+
+            var statusLabel = mainPanel.Controls
+                .OfType<Label>()
+                .FirstOrDefault(l => l.Name == "statusLabel");
+
+            if (statusLabel != null)
+            {
+                statusLabel.Text = $"Status: {errorMessage}";
+                statusLabel.ForeColor = Color.Red;
+            }
+
+            Debug.WriteLine($"Audio Error: {errorMessage}");
+
+            // Tự động thử lại hoặc reset kết nối nếu cần
+            Task.Delay(1000).ContinueWith(_ => {
+                if (!isConnected) return;
+                ResetConnection();
+                InitializeAudio();
+            });
         }
 
 
@@ -312,10 +353,10 @@ namespace Gr2_Audio
             };
             Button recordButton = new Button
             {
-                Location = new Point(30, 400),   // Vị trí của nút ghi âm
+                Location = new Point(30, 400),
                 Name = "recordButton",
                 Size = new Size(120, 50),
-                Text = "Start Recording",         // Text ban đầu khi chưa ghi âm
+                Text = "Start Recording",
                 BackColor = Color.LightBlue,
                 Font = new Font("Arial", 12, FontStyle.Bold),
                 FlatStyle = FlatStyle.Flat
@@ -479,37 +520,31 @@ namespace Gr2_Audio
 
             if (isRecording)
             {
-                if (waveIn != null)
-                {
-                    waveIn.StopRecording();
-                    waveIn.Dispose();
-                    waveIn = null;
-                }
                 if (waveFileWriter != null)
                 {
+                    waveFileWriter.Flush();
+                    waveFileWriter.Close();
                     waveFileWriter.Dispose();
                     waveFileWriter = null;
                 }
 
                 recordButton.Text = "Start Recording";
-                MessageBox.Show("Recording stopped and saved to: " + audioFilePath);
+                recordButton.BackColor = Color.LightBlue;
+                MessageBox.Show("Recording saved to: " + audioFilePath);
                 isRecording = false;
             }
             else
             {
                 audioFilePath = "audio_recording_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".wav";
-                waveIn = new WaveIn();
-                waveIn.WaveFormat = new WaveFormat(44100, 1);
-                waveIn.DataAvailable += (s, args) =>
-                {
-                    // Chỉ ghi nếu writer đã được khởi tạo
-                    if (waveFileWriter != null)
-                        waveFileWriter.Write(args.Buffer, 0, args.BytesRecorded);
-                };
                 waveFileWriter = new WaveFileWriter(audioFilePath, waveIn.WaveFormat);
 
-                waveIn.StartRecording();
+                if (waveIn != null && !isMicMuted)
+                {
+                    waveIn.StartRecording();
+                }
+
                 recordButton.Text = "Stop Recording";
+                recordButton.BackColor = Color.Orange;
                 isRecording = true;
             }
         }
@@ -604,18 +639,72 @@ namespace Gr2_Audio
         {
             try
             {
-                waveOut = new WaveOut();
-                waveProvider = new BufferedWaveProvider(new WaveFormat(44100, 1));
+                if (waveOut != null)
+                {
+                    waveOut.Stop();
+                    waveOut.Dispose();
+                    waveOut = null;
+                }
+
+                if (waveProvider != null)
+                {
+                    waveProvider.ClearBuffer();
+                    waveProvider = null;
+                }
+
+                waveProvider = new BufferedWaveProvider(new WaveFormat(44100, 1))
+                {
+                    DiscardOnBufferOverflow = true, 
+                    BufferDuration = TimeSpan.FromMilliseconds(500) 
+                };
+
+                waveOut = new WaveOut
+                {
+                    DesiredLatency = 200, // Độ trễ thấp
+                    NumberOfBuffers = 2   // Số buffer
+                };
+
                 waveOut.Init(waveProvider);
                 waveOut.Play();
 
-                var volumeBar = mainPanel.Controls.Find("volumeBar", false)[0] as TrackBar;
-                waveOut.Volume = volumeBar.Value / 100f;
+                // Thiết lập âm lượng từ thanh trượt
+                var volumeBar = mainPanel.Controls.Find("volumeBar", false).FirstOrDefault() as TrackBar;
+                if (volumeBar != null)
+                {
+                    waveOut.Volume = Math.Max(0f, Math.Min(1f, volumeBar.Value / 100f));
+                }
+                else
+                {
+                    waveOut.Volume = 0.5f; // Âm lượng mặc định nếu không tìm thấy thanh trượt
+                }
+
+                waveOut.PlaybackStopped += (sender, e) =>
+                {
+                    if (e.Exception != null)
+                    {
+                        this.Invoke((MethodInvoker)delegate
+                        {
+                            MessageBox.Show($"Playback stopped unexpectedly: {e.Exception.Message}",
+                                "Playback Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                        });
+                    }
+                };
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Error initializing audio devices: {ex.Message}",
-                    "Audio Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                // Hiển thị lỗi trên giao diện thay vì MessageBox để tránh làm gián đoạn
+                this.Invoke((MethodInvoker)delegate
+                {
+                    var statusLabel = mainPanel.Controls.Find("statusLabel", false).FirstOrDefault() as Label;
+                    if (statusLabel != null)
+                    {
+                        statusLabel.Text = $"Audio Error: {ex.Message}";
+                        statusLabel.ForeColor = Color.Red;
+                    }
+                });
+
+                // Ghi log lỗi
+                Debug.WriteLine($"Audio initialization failed: {ex}");
             }
         }
 
@@ -708,72 +797,257 @@ namespace Gr2_Audio
         {
             ResetConnection();
             UpdateStatus("Call ended. Audio saved to: " + audioFilePath, Color.White);
-            // Đóng file ghi âm sau khi kết thúc cuộc gọi
             waveFileWriter?.Close();
         }
 
         private void ResetConnection()
         {
-            isConnected = false;
-            isMicMuted = false;
-
-            cancellationTokenSource?.Cancel();
-
-            if (waveIn != null)
+            try
             {
-                waveIn.StopRecording();
-                waveIn.Dispose();
-                waveIn = null;
-            }
+                // Đặt lại tất cả các cờ trạng thái
+                isConnected = false;
+                isMicMuted = false;
+                isVideoStreaming = false;
+                isProcessingFrame = false;
 
-            if (waveOut != null)
+                if (cancellationTokenSource != null)
+                {
+                    try
+                    {
+                        if (!cancellationTokenSource.IsCancellationRequested)
+                            cancellationTokenSource.Cancel();
+                        cancellationTokenSource.Dispose();
+                    }
+                    catch (ObjectDisposedException) {}
+                    finally
+                    {
+                        cancellationTokenSource = null;
+                    }
+                }
+
+                if (!isRecording && waveIn != null)
+                {
+                    try
+                    {
+                        waveIn.StopRecording();
+                        waveIn.DataAvailable -= WaveIn_DataAvailable;
+                        waveIn.Dispose();
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"Error disposing waveIn: {ex}");
+                    }
+                    finally
+                    {
+                        waveIn = null;
+                    }
+                }
+
+                if (waveOut != null)
+                {
+                    try
+                    {
+                        waveOut.Stop();
+                        waveOut.Dispose();
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"Error disposing waveOut: {ex}");
+                    }
+                    finally
+                    {
+                        waveOut = null;
+                    }
+                }
+
+                if (waveProvider != null)
+                {
+                    waveProvider.ClearBuffer();
+                    waveProvider = null;
+                }
+
+                if (isRecording && waveFileWriter != null)
+                {
+                    try
+                    {
+                        waveFileWriter.Flush();
+                        waveFileWriter.Close();
+                        MessageBox.Show($"Recording saved to: {audioFilePath}");
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"Error closing waveFileWriter: {ex}");
+                    }
+                    finally
+                    {
+                        waveFileWriter = null;
+                        isRecording = false;
+                    }
+                }
+
+                CloseNetworkResources();
+                StopVideoDevice();
+                UpdateUIAfterReset();
+            }
+            catch (Exception ex)
             {
-                waveOut.Stop();
-                waveOut.Dispose();
-                waveOut = null;
+                Debug.WriteLine($"ResetConnection error: {ex}");
+                if (this.InvokeRequired)
+                {
+                    this.Invoke(new Action(() =>
+                        MessageBox.Show($"Error resetting connection: {ex.Message}",
+                                      "Connection Error",
+                                      MessageBoxButtons.OK,
+                                      MessageBoxIcon.Error)));
+                }
+                else
+                {
+                    MessageBox.Show($"Error resetting connection: {ex.Message}",
+                                  "Connection Error",
+                                  MessageBoxButtons.OK,
+                                  MessageBoxIcon.Error);
+                }
             }
+        }
 
-            if (stream != null)
-            {
-                stream.Close();
-                stream = null;
-            }
+        private void CloseNetworkResources()
+        {
+            // Đóng các stream và client theo đúng thứ tự
+            CloseNetworkStream(ref stream);
+            CloseNetworkStream(ref videoStream);
+            CloseTcpClient(ref client);
+            CloseTcpClient(ref videoClient);
 
-            if (client != null)
-            {
-                client.Close();
-                client = null;
-            }
-
+            // Dừng server
             if (server != null)
             {
-                server.Stop();
+                try
+                {
+                    server.Stop();
+                }
+                catch (SocketException ex)
+                {
+                    Debug.WriteLine($"Server stop error: {ex.Message}");
+                }
                 server = null;
-            }
-
-            if (videoStream != null)
-            {
-                videoStream.Close();
-                videoStream = null;
-            }
-
-            if (videoClient != null)
-            {
-                videoClient.Close();
-                videoClient = null;
             }
 
             if (videoServer != null)
             {
-                videoServer.Stop();
+                try
+                {
+                    videoServer.Stop();
+                }
+                catch (SocketException ex)
+                {
+                    Debug.WriteLine($"Video server stop error: {ex.Message}");
+                }
                 videoServer = null;
             }
+        }
 
-            cancellationTokenSource?.Dispose();
-            cancellationTokenSource = null;
+        private void CloseNetworkStream(ref NetworkStream stream)
+        {
+            try
+            {
+                stream?.Close();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error closing stream: {ex}");
+            }
+            finally
+            {
+                stream = null;
+            }
+        }
 
+        private void CloseTcpClient(ref TcpClient client)
+        {
+            try
+            {
+                client?.Close();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error closing client: {ex}");
+            }
+            finally
+            {
+                client = null;
+            }
+        }
+
+        private void StopVideoDevice()
+        {
+            if (videoDevice != null && videoDevice.IsRunning)
+            {
+                try
+                {
+                    videoDevice.SignalToStop();
+                    videoDevice.NewFrame -= VideoDevice_NewFrame;
+
+                    // Đợi một chút để device dừng hoàn toàn
+                    Task.Delay(100).Wait();
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Error stopping video device: {ex}");
+                }
+                finally
+                {
+                    videoDevice = null;
+                }
+            }
+        }
+
+        private void UpdateUIAfterReset()
+        {
+            if (this.InvokeRequired)
+            {
+                this.Invoke(new Action(UpdateUIAfterReset));
+                return;
+            }
+
+            // Khởi tạo lại audio devices
             InitializeAudio();
             UpdateButtonStates(false);
+
+            var statusLabel = mainPanel.Controls.Find("statusLabel", false).FirstOrDefault() as Label;
+            if (statusLabel != null)
+            {
+                statusLabel.Text = "Status: Disconnected";
+                statusLabel.ForeColor = Color.White;
+            }
+
+            if (videoBox != null) videoBox.Image = null;
+            if (localVideoBox != null) localVideoBox.Image = null;
+
+            var recordButton = mainPanel.Controls.Find("recordButton", false).FirstOrDefault() as Button;
+            if (recordButton != null)
+            {
+                recordButton.Text = "Start Recording";
+                recordButton.BackColor = Color.LightBlue;
+            }
+        }
+
+        private void SafeCancelDispose(ref CancellationTokenSource cts)
+        {
+            try
+            {
+                if (cts != null)
+                {
+                    if (!cts.IsCancellationRequested)
+                        cts.Cancel();
+
+                    cts.Dispose();
+                }
+            }
+            catch (ObjectDisposedException) {}
+            finally
+            {
+                cts = null;
+            }
         }
 
         private void AddToConnectionHistory(string serverInfo)
@@ -788,7 +1062,7 @@ namespace Gr2_Audio
                 string connectionInfo = $"{serverInfo} - {DateTime.Now:dd/MM/yyyy HH:mm:ss}";
                 connectionHistory.Insert(0, connectionInfo);
 
-                // Giữ lại tối đa 10 bản ghi gần nhất, loại bỏ bản ghi không hợp lệ
+                // Giữ lại tối đa 50 bản ghi gần nhất, loại bỏ bản ghi không hợp lệ
                 connectionHistory = connectionHistory
                     .Where(entry =>
                     {
@@ -803,12 +1077,11 @@ namespace Gr2_Audio
                             DateTimeStyles.None,
                             out dt);
                     })
-                    .Take(10)
+                    .Take(50) // thay đổi số lần tại đây nếu muốn lưu nhiều hơn
                     .ToList();
 
                 SaveConnectionHistory();
 
-                // Kiểm tra file có tồn tại không, nếu không thì tạo file mẫu
                 if (!File.Exists(HISTORY_FILE_PATH))
                 {
                     File.WriteAllText(HISTORY_FILE_PATH, "Test file created by AddToConnectionHistory\n");
@@ -1086,4 +1359,3 @@ namespace Gr2_Audio
         }
     }
 }
-
