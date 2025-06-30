@@ -125,7 +125,7 @@ namespace Gr2_Audio
             }
             catch (Exception ex)
             {
-                var statusLabelArray = mainPanel.Controls.Find("statusLabel", false);
+                var statusLabelArray = mainPanel.Controls.Find("statusLabel", true);
                 if (statusLabelArray.Length > 0)
                 {
                     var statusLabel = statusLabelArray[0] as Label;
