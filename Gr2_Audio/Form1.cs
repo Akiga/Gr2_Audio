@@ -23,7 +23,7 @@ namespace Gr2_Audio
     public partial class Form1 : Form
     {
         private const string HISTORY_FILE_PATH = "history.txt";
-        private WaveIn waveIn;
+        private WaveInEvent waveIn; // Change the type of `waveIn` to `WaveInEvent`
         private WaveOut waveOut;
         private BufferedWaveProvider waveProvider;
         private TcpListener server;
@@ -85,13 +85,17 @@ namespace Gr2_Audio
         private void LoadConnectionHistory()
         {
             connectionHistory.Clear();
-
             try
             {
                 if (File.Exists(HISTORY_FILE_PATH))
                 {
                     var lines = File.ReadAllLines(HISTORY_FILE_PATH);
                     connectionHistory.AddRange(lines);
+                    Debug.WriteLine("History loaded: " + string.Join(",", connectionHistory));
+                }
+                else
+                {
+                    Debug.WriteLine("history.txt not found at: " + Path.GetFullPath(HISTORY_FILE_PATH));
                 }
             }
             catch (Exception ex)
@@ -103,8 +107,7 @@ namespace Gr2_Audio
 
         private void InitializeAudio()
         {
-
-            waveIn = new WaveIn();
+            waveIn = new WaveInEvent(); // Change the type of `waveIn` to `WaveInEvent`
             waveIn.WaveFormat = new WaveFormat(44100, 1);  
             waveIn.DataAvailable += WaveIn_DataAvailable; 
             waveIn.BufferMilliseconds = 50;
@@ -116,32 +119,16 @@ namespace Gr2_Audio
         {
             try
             {
-                bool shouldWriteToFile = isRecording && waveFileWriter != null;
-                bool shouldSendToNetwork = stream != null && stream.CanWrite && !isMicMuted;
-
-                if (!shouldWriteToFile && !shouldSendToNetwork)
-                    return;
-                if (shouldWriteToFile && shouldSendToNetwork)
-                {
-                    waveFileWriter.Write(e.Buffer, 0, e.BytesRecorded);
-                    stream.Write(e.Buffer, 0, e.BytesRecorded);
-                }
-                else if (shouldWriteToFile)
+                // Ghi vào file nếu đang ghi âm
+                if (isRecording && waveFileWriter != null)
                 {
                     waveFileWriter.Write(e.Buffer, 0, e.BytesRecorded);
                 }
-                else if (shouldSendToNetwork)
+                // Gửi lên mạng nếu không mute và stream hợp lệ
+                if (stream != null && stream.CanWrite && !isMicMuted)
                 {
                     stream.Write(e.Buffer, 0, e.BytesRecorded);
                 }
-            }
-            catch (IOException ioEx)
-            {
-                HandleAudioError($"Network/File error: {ioEx.Message}");
-            }
-            catch (ObjectDisposedException disposedEx)
-            {
-                HandleAudioError($"Audio resource disposed: {disposedEx.Message}");
             }
             catch (Exception ex)
             {
@@ -520,6 +507,7 @@ namespace Gr2_Audio
 
             if (isRecording)
             {
+                // Đang ghi, nhấn để dừng
                 if (waveFileWriter != null)
                 {
                     waveFileWriter.Flush();
@@ -528,24 +516,22 @@ namespace Gr2_Audio
                     waveFileWriter = null;
                 }
 
+                // Dừng ghi file, không dừng waveIn
+                isRecording = false;
                 recordButton.Text = "Start Recording";
                 recordButton.BackColor = Color.LightBlue;
                 MessageBox.Show("Recording saved to: " + audioFilePath);
-                isRecording = false;
             }
             else
             {
+                // Đang không ghi, nhấn để bắt đầu
                 audioFilePath = "audio_recording_" + DateTime.Now.ToString("yyyyMMdd_HHmmss") + ".wav";
                 waveFileWriter = new WaveFileWriter(audioFilePath, waveIn.WaveFormat);
 
-                if (waveIn != null && !isMicMuted)
-                {
-                    waveIn.StartRecording();
-                }
-
+                // Không cần gọi waveIn.StartRecording() nếu nó đã chạy cho truyền âm thanh
+                isRecording = true;
                 recordButton.Text = "Stop Recording";
                 recordButton.BackColor = Color.Orange;
-                isRecording = true;
             }
         }
 
@@ -595,7 +581,7 @@ namespace Gr2_Audio
                 videoStream = videoClient.GetStream();
 
                 SetupSuccessfulConnection();
-                AddToConnectionHistory(serverIP);
+                AddToConnectionHistory($"{serverIP}");
                 UpdateStatus("Connected! Call in progress.", Color.Green);
             }
             catch (Exception ex)
@@ -795,377 +781,6 @@ namespace Gr2_Audio
 
         private void EndCall(object sender, EventArgs e)
         {
-            ResetConnection();
-            UpdateStatus("Call ended. Audio saved to: " + audioFilePath, Color.White);
-            waveFileWriter?.Close();
-        }
-
-        private void ResetConnection()
-        {
-            try
-            {
-                // Đặt lại tất cả các cờ trạng thái
-                isConnected = false;
-                isMicMuted = false;
-                isVideoStreaming = false;
-                isProcessingFrame = false;
-
-                if (cancellationTokenSource != null)
-                {
-                    try
-                    {
-                        if (!cancellationTokenSource.IsCancellationRequested)
-                            cancellationTokenSource.Cancel();
-                        cancellationTokenSource.Dispose();
-                    }
-                    catch (ObjectDisposedException) {}
-                    finally
-                    {
-                        cancellationTokenSource = null;
-                    }
-                }
-
-                if (!isRecording && waveIn != null)
-                {
-                    try
-                    {
-                        waveIn.StopRecording();
-                        waveIn.DataAvailable -= WaveIn_DataAvailable;
-                        waveIn.Dispose();
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.WriteLine($"Error disposing waveIn: {ex}");
-                    }
-                    finally
-                    {
-                        waveIn = null;
-                    }
-                }
-
-                if (waveOut != null)
-                {
-                    try
-                    {
-                        waveOut.Stop();
-                        waveOut.Dispose();
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.WriteLine($"Error disposing waveOut: {ex}");
-                    }
-                    finally
-                    {
-                        waveOut = null;
-                    }
-                }
-
-                if (waveProvider != null)
-                {
-                    waveProvider.ClearBuffer();
-                    waveProvider = null;
-                }
-
-                if (isRecording && waveFileWriter != null)
-                {
-                    try
-                    {
-                        waveFileWriter.Flush();
-                        waveFileWriter.Close();
-                        MessageBox.Show($"Recording saved to: {audioFilePath}");
-                    }
-                    catch (Exception ex)
-                    {
-                        Debug.WriteLine($"Error closing waveFileWriter: {ex}");
-                    }
-                    finally
-                    {
-                        waveFileWriter = null;
-                        isRecording = false;
-                    }
-                }
-
-                CloseNetworkResources();
-                StopVideoDevice();
-                UpdateUIAfterReset();
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"ResetConnection error: {ex}");
-                if (this.InvokeRequired)
-                {
-                    this.Invoke(new Action(() =>
-                        MessageBox.Show($"Error resetting connection: {ex.Message}",
-                                      "Connection Error",
-                                      MessageBoxButtons.OK,
-                                      MessageBoxIcon.Error)));
-                }
-                else
-                {
-                    MessageBox.Show($"Error resetting connection: {ex.Message}",
-                                  "Connection Error",
-                                  MessageBoxButtons.OK,
-                                  MessageBoxIcon.Error);
-                }
-            }
-        }
-
-        private void CloseNetworkResources()
-        {
-            // Đóng các stream và client theo đúng thứ tự
-            CloseNetworkStream(ref stream);
-            CloseNetworkStream(ref videoStream);
-            CloseTcpClient(ref client);
-            CloseTcpClient(ref videoClient);
-
-            // Dừng server
-            if (server != null)
-            {
-                try
-                {
-                    server.Stop();
-                }
-                catch (SocketException ex)
-                {
-                    Debug.WriteLine($"Server stop error: {ex.Message}");
-                }
-                server = null;
-            }
-
-            if (videoServer != null)
-            {
-                try
-                {
-                    videoServer.Stop();
-                }
-                catch (SocketException ex)
-                {
-                    Debug.WriteLine($"Video server stop error: {ex.Message}");
-                }
-                videoServer = null;
-            }
-        }
-
-        private void CloseNetworkStream(ref NetworkStream stream)
-        {
-            try
-            {
-                stream?.Close();
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Error closing stream: {ex}");
-            }
-            finally
-            {
-                stream = null;
-            }
-        }
-
-        private void CloseTcpClient(ref TcpClient client)
-        {
-            try
-            {
-                client?.Close();
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"Error closing client: {ex}");
-            }
-            finally
-            {
-                client = null;
-            }
-        }
-
-        private void StopVideoDevice()
-        {
-            if (videoDevice != null && videoDevice.IsRunning)
-            {
-                try
-                {
-                    videoDevice.SignalToStop();
-                    videoDevice.NewFrame -= VideoDevice_NewFrame;
-
-                    // Đợi một chút để device dừng hoàn toàn
-                    Task.Delay(100).Wait();
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"Error stopping video device: {ex}");
-                }
-                finally
-                {
-                    videoDevice = null;
-                }
-            }
-        }
-
-        private void UpdateUIAfterReset()
-        {
-            if (this.InvokeRequired)
-            {
-                this.Invoke(new Action(UpdateUIAfterReset));
-                return;
-            }
-
-            // Khởi tạo lại audio devices
-            InitializeAudio();
-            UpdateButtonStates(false);
-
-            var statusLabel = mainPanel.Controls.Find("statusLabel", false).FirstOrDefault() as Label;
-            if (statusLabel != null)
-            {
-                statusLabel.Text = "Status: Disconnected";
-                statusLabel.ForeColor = Color.White;
-            }
-
-            if (videoBox != null) videoBox.Image = null;
-            if (localVideoBox != null) localVideoBox.Image = null;
-
-            var recordButton = mainPanel.Controls.Find("recordButton", false).FirstOrDefault() as Button;
-            if (recordButton != null)
-            {
-                recordButton.Text = "Start Recording";
-                recordButton.BackColor = Color.LightBlue;
-            }
-        }
-
-        private void SafeCancelDispose(ref CancellationTokenSource cts)
-        {
-            try
-            {
-                if (cts != null)
-                {
-                    if (!cts.IsCancellationRequested)
-                        cts.Cancel();
-
-                    cts.Dispose();
-                }
-            }
-            catch (ObjectDisposedException) {}
-            finally
-            {
-                cts = null;
-            }
-        }
-
-        private void AddToConnectionHistory(string serverInfo)
-        {
-            if (string.IsNullOrWhiteSpace(serverInfo) ||
-                serverInfo.Contains("Enter IP address to connect") ||
-                serverInfo.Contains("No Wi-Fi IPv4 address found"))
-                return;
-
-            try
-            {
-                string connectionInfo = $"{serverInfo} - {DateTime.Now:dd/MM/yyyy HH:mm:ss}";
-                connectionHistory.Insert(0, connectionInfo);
-
-                // Giữ lại tối đa 50 bản ghi gần nhất, loại bỏ bản ghi không hợp lệ
-                connectionHistory = connectionHistory
-                    .Where(entry =>
-                    {
-                        var idx = entry.LastIndexOf('-');
-                        if (idx < 0) return false;
-                        var datePart = entry.Substring(idx + 1).Trim();
-                        DateTime dt;
-                        return DateTime.TryParseExact(
-                            datePart,
-                            "dd/MM/yyyy HH:mm:ss",
-                            CultureInfo.InvariantCulture,
-                            DateTimeStyles.None,
-                            out dt);
-                    })
-                    .Take(50) // thay đổi số lần tại đây nếu muốn lưu nhiều hơn
-                    .ToList();
-
-                SaveConnectionHistory();
-
-                if (!File.Exists(HISTORY_FILE_PATH))
-                {
-                    File.WriteAllText(HISTORY_FILE_PATH, "Test file created by AddToConnectionHistory\n");
-                }
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Error updating connection history: {ex.Message}",
-                    "History Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
-        }
-
-        private void ShowHistory()
-        {
-            mainPanel.Controls.Clear();
-
-            Label titleLabel = new Label
-            {
-                Text = "Connection History",
-                Location = new Point(50, 20),
-                Size = new Size(500, 30),
-                Font = new Font("Arial", 16, FontStyle.Bold),
-                ForeColor = Color.White,
-                TextAlign = ContentAlignment.MiddleCenter
-            };
-
-            ListBox historyListBox = new ListBox
-            {
-                Location = new Point(50, 60),
-                Size = new Size(500, 300),
-                Font = new Font("Arial", 12),
-                BackColor = Color.FromArgb(47, 54, 64),
-                ForeColor = Color.White,
-                BorderStyle = BorderStyle.FixedSingle
-            };
-
-            if (connectionHistory.Count == 0)
-            {
-                historyListBox.Items.Add("No connection history available");
-            }
-            else
-            {
-                foreach (string connection in connectionHistory)
-                {
-                    historyListBox.Items.Add(connection);
-                }
-            }
-
-            Button clearButton = new Button
-            {
-                Text = "Clear History",
-                Location = new Point(50, 370),
-                Size = new Size(150, 40),
-                Font = new Font("Arial", 12, FontStyle.Bold),
-                BackColor = Color.IndianRed,
-                FlatStyle = FlatStyle.Flat
-            };
-            clearButton.Click += (s, e) =>
-            {
-                connectionHistory.Clear();
-                File.Delete(HISTORY_FILE_PATH);
-                historyListBox.Items.Clear();
-                historyListBox.Items.Add("No connection history available");
-            };
-
-            Button backButton = new Button
-            {
-                Text = "Back",
-                Location = new Point(400, 370),
-                Size = new Size(150, 40),
-                Font = new Font("Arial", 12, FontStyle.Bold),
-                BackColor = Color.LightGray,
-                FlatStyle = FlatStyle.Flat
-            };
-            backButton.Click += (s, e) => ShowCallInterface();
-
-            mainPanel.Controls.Add(titleLabel);
-            mainPanel.Controls.Add(historyListBox);
-            mainPanel.Controls.Add(clearButton);
-            mainPanel.Controls.Add(backButton);
-        }
-
-        private void EndButton_Click(object sender, EventArgs e)
-        {
             EndCall();
         }
 
@@ -1173,6 +788,13 @@ namespace Gr2_Audio
         {
             isConnected = false;
             isMicMuted = false;
+
+            // Lưu lịch sử trước khi giải phóng tài nguyên
+            if (client != null && client.Client.RemoteEndPoint != null)
+            {
+                string remoteIP = ((System.Net.IPEndPoint)client.Client.RemoteEndPoint).Address.ToString();
+                AddToConnectionHistory(remoteIP);
+            }
 
             if (waveIn != null)
             {
@@ -1341,16 +963,94 @@ namespace Gr2_Audio
             ShowCallInterface();
         }
 
-        
+        private void ResetConnection()
+        {
+            EndCall();
+        }
+
+        private void AddToConnectionHistory(string serverInfo)
+        {
+            string entry = $"{serverInfo} - {DateTime.Now:yyyy-MM-dd HH:mm:ss}";
+            if (!connectionHistory.Any(x => x.StartsWith(serverInfo)))
+            {
+                connectionHistory.Add(entry);
+                SaveConnectionHistory();
+            }
+        }
+
+        private void ShowHistory()
+        {
+            mainPanel.Controls.Clear();
+
+            Label titleLabel = new Label
+            {
+                Text = "Connection History",
+                Location = new Point(50, 20),
+                Size = new Size(500, 30),
+                Font = new Font("Arial", 16, FontStyle.Bold),
+                ForeColor = Color.White,
+                TextAlign = ContentAlignment.MiddleCenter
+            };
+
+            ListBox historyListBox = new ListBox
+            {
+                Location = new Point(50, 60),
+                Size = new Size(500, 300),
+                Font = new Font("Arial", 12),
+                BackColor = Color.FromArgb(47, 54, 64),
+                ForeColor = Color.White,
+                BorderStyle = BorderStyle.FixedSingle
+            };
+
+            if (connectionHistory.Count == 0)
+            {
+                historyListBox.Items.Add("No connection history available");
+            }
+            else
+            {
+                foreach (string connection in connectionHistory)
+                {
+                    historyListBox.Items.Add(connection);
+                }
+            }
+
+            Button clearButton = new Button
+            {
+                Text = "Clear History",
+                Location = new Point(50, 370),
+                Size = new Size(150, 40),
+                Font = new Font("Arial", 12, FontStyle.Bold),
+                BackColor = Color.IndianRed,
+                FlatStyle = FlatStyle.Flat
+            };
+            clearButton.Click += (s, e) =>
+            {
+                connectionHistory.Clear();
+                File.Delete(HISTORY_FILE_PATH);
+                historyListBox.Items.Clear();
+                historyListBox.Items.Add("No connection history available");
+            };
+
+            Button backButton = new Button
+            {
+                Text = "Back",
+                Location = new Point(400, 370),
+                Size = new Size(150, 40),
+                Font = new Font("Arial", 12, FontStyle.Bold),
+                BackColor = Color.LightGray,
+                FlatStyle = FlatStyle.Flat
+            };
+            backButton.Click += (s, e) => ShowCallInterface();
+
+            mainPanel.Controls.Add(titleLabel);
+            mainPanel.Controls.Add(historyListBox);
+            mainPanel.Controls.Add(clearButton);
+            mainPanel.Controls.Add(backButton);
+        }
 
         private void exitButton_Click(object sender, EventArgs e)
         {
             Application.Exit();
-        }
-
-        private void mainPanel_Paint(object sender, PaintEventArgs e)
-        {
-
         }
 
         private void historyButton_Click(object sender, EventArgs e)
