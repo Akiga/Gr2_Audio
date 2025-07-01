@@ -340,7 +340,7 @@ namespace Gr2_Audio
             };
             Button recordButton = new Button
             {
-                Location = new Point(30, 400),
+                Location = new Point(162, 430),
                 Name = "recordButton",
                 Size = new Size(120, 50),
                 Text = "Start Recording",
@@ -375,8 +375,7 @@ namespace Gr2_Audio
                 ForeColor = Color.Black
             };
 
-            TrackBar volumeBar = new TrackBar
-            {
+            TrackBar volumeBar = new TrackBar            {
                 Location = new Point(110, 370),
                 Name = "volumeBar",
                 Size = new Size(200, 45),
