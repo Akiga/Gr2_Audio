@@ -971,11 +971,8 @@ namespace Gr2_Audio
         private void AddToConnectionHistory(string serverInfo)
         {
             string entry = $"{serverInfo} - {DateTime.Now:yyyy-MM-dd HH:mm:ss}";
-            if (!connectionHistory.Any(x => x.StartsWith(serverInfo)))
-            {
-                connectionHistory.Add(entry);
-                SaveConnectionHistory();
-            }
+            connectionHistory.Add(entry);
+            SaveConnectionHistory();
         }
 
         private void ShowHistory()
