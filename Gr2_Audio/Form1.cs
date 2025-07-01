@@ -660,7 +660,7 @@ namespace Gr2_Audio
                 }
                 else
                 {
-                    waveOut.Volume = 0.5f; // Âm lượng mặc định nếu không tìm thấy thanh trượt
+                    waveOut.Volume = 1.0f; // Âm lượng mặc định nếu không tìm thấy thanh trượt
                 }
 
                 waveOut.PlaybackStopped += (sender, e) =>
