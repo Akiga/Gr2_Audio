@@ -785,6 +785,12 @@ namespace Gr2_Audio
 
         private void EndCall()
         {
+            if (this.InvokeRequired)
+            {
+                this.Invoke((MethodInvoker)EndCall);
+                return;
+            }
+
             isConnected = false;
             isMicMuted = false;
 
